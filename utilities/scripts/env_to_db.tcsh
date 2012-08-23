@@ -12,7 +12,7 @@
 # Because people may have the source tree in different locations, we
 # use the environment varioable TPF_ROOT to define the directory path
 # down to the "tpf" directory of the code repository. Under "tpf"
-# the actual application is in src, so $TPF_ROOT/tpf/srt/tpf_panfs.x
+# the actual application is in tpf, so $TPF_ROOT/tpf/tpf_panfs.x
 
 
 # set up
@@ -27,7 +27,7 @@ set target = `echo $target | sed 's/.*://g'`
 set target_dir = $target:h
 set target_mnt = `echo $target | tr "/" " " | awk '{print $2}'`
 
-set tpf = $TPF_ROOT/tpf/trunk/tpf_panfs.${MY_MPI_HOST}.x
+set tpf = $TPF_ROOT/tpf/tpf_panfs.${MY_MPI_HOST}.x
 
 set panfs_trace1 = /usr/sbin/panfs_trace
 set panfs_trace2 = /usr/local/sbin/panfs_trace
