@@ -68,6 +68,10 @@ struct myoption {
     char *help;
 };
 
+/* Note that in fs_test.c's "init" function, memset is used to set all
+ * values of this structure to 0 (zero).
+ */
+
 struct time_values {
     double file_open_wait_time; 
     double file_open_wait_start_time;
@@ -123,6 +127,10 @@ struct read_error {
     off_t str_length;
 };
 
+/* Note that in fs_test.c's "init" function, memset is used to set all
+ * values of this structure to 0 (zero).
+ */
+
 struct State {
     int fd;
     char *error_string;
@@ -142,6 +150,10 @@ struct State {
     Plfs_fd *plfs_fd;
     #endif
 };
+
+/* Note that in fs_test.c's "init" function, memset is used to set all
+ * values of this structure to 0 (zero).
+ */
 
 struct Parameters {
   int    test_type;
@@ -191,6 +203,8 @@ struct Parameters {
   int    verbose_flag;         /* Print times for all processes           */
   int    trenddata;            /* Print output in Gazebo trend data format */
   int    time_limit;           /* whether to only run for a fixed time */
+  unsigned int num_nn_dirs;    /* Number of directories for non-PLFS N-N I/O files */
+  char         *nn_dir_prefix; /* The prefix of the NN directory names for distributing NN I/O */
 
   int panfs_info_valid;
   int panfs_type;
@@ -265,7 +279,111 @@ void *Malloc( size_t size, FILE *fp, int rank );
 void *Valloc( size_t size, FILE *fp, int rank );
 
 char printable_char( int index );
-char * expand_path(char *str, int rank, long timestamp);
+/*
+ * This function fills "nn_dir_num_buf" with a 0 (zero) padded number, whose
+ * total length is equal to "max_num_nn_dirs_len". The buffer should
+ * be pre-allocated and have enough room for that, plus the \0 (NULL) byte at
+ * the end.
+ *
+ * This function returns 0 (zero) on success, -1 otherwise.
+ */
+
+int make_nn_dir_num_string(
+      char *nn_dir_num_buf,
+      unsigned int nn_dir_num,
+      size_t max_num_nn_dirs_len,
+      struct State *state );
+
+/*
+ * This function allocates memory for and fills "nn_dir_buf" with the concatenation of:
+ *
+ * parent_dir
+ * "/"
+ * nn_dir_prefix
+ * string representation of "nn_dir_num" that is zero-padded to "max_num_nn_dirs_len".
+ *
+ * This function returns 0 (zero) on success, -1 otherwise.
+ *
+ * The caller must free "nn_dir_buf".
+ */
+
+int make_nn_dir_string(
+    char **nn_dir_buf,
+    char *parent_dir,
+    char *nn_dir_prefix,
+    unsigned int nn_dir_num,
+    size_t max_num_nn_dirs_len,
+    struct State *state );
+
+/*
+ * Make the subdirectories for the N-N I/O job under "parent_dir" with the
+ * base name "nn_dir_prefix" and numbers appended to that.
+ *
+ * This function returns 0 if successful, otherwise it prints an error and
+ * returns -1.
+ *
+ * Don't forget to make sure nn_dir_prefix has a value before calling this.
+ */
+
+int make_nn_dirs(
+      char *parent_dir,
+      char *nn_dir_prefix,
+      unsigned int num_nn_dirs,
+      struct State *state );
+
+/*
+ * Remove the subdirectories for the N-N I/O job under "parent_dir" with the
+ * base name "nn_dir_prefix" and numbers appended to that.
+ *
+ * This function returns 0 if successful, otherwise it prints an error and
+ * returns -1.
+ *
+ * Don't forget to make sure nn_dir_prefix has a value before calling this.
+ */
+
+int remove_nn_dirs(
+      char *parent_dir,
+      char *nn_dir_prefix,
+      unsigned int num_nn_dirs,
+      struct State *state );
+
+/*
+ * If the user provided a value for nn_dir_prefix, this function does nothing.
+ * If the user did not provide a value for nn_dir_prefix, this function sets
+ * it to the default value.
+ *
+ * This function returns 0 if successful, otherwise it prints an error and
+ * returns -1.
+ */
+
+int set_nn_dir_prefix(
+      char **nn_dir_prefix,
+      struct State *state );
+
+/*
+ * This function takes in path and returns a newly allocated string that is
+ * the concatenation of:
+ * 
+ * dirname( path )
+ * "/"
+ * nn_dir_prefix (if NULL, then the default is "nn_dir"
+ * "%d" (the expansion indicator for the N-N dir number calculated in expand_path)
+ * "/"
+ * basename( path )
+ *
+ * Also, if nn_dir_prefix is the NULL or empty string, a default value will be
+ * assigned to it and returned to the caller via a call to set_nn_dir_prefix.
+ */
+char * expand_tfname_for_nn(
+         char *path,
+         char **nn_dir_prefix,
+         struct State *state );
+
+char * expand_path(
+         char *str,
+         long timestamp,
+         unsigned int num_nn_dirs,
+         struct State *state );
 int parse_size(int my_rank, char *chbytes, long long int *out_value);
 
 void fill_buf( char *check_buf, int blocksize, int rank, int i, int pagesize,

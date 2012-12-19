@@ -20,19 +20,20 @@ import fs_test,expr_mgmt
 # Sometimes you may want little helper Python variables.
 #
 user     = getpass.getuser()
+home     = os.getenv( "HOME" )
+mpi_host = os.getenv( "MY_MPI_HOST" )
 #
 # Tell where the fs_test program is sitting.
 #
-mpi_program = ( os.getenv("HOME") + "/path/to/fs_test/fs_test." + os.getenv("MY_MPI_HOST") + ".x" ) 
+mpi_program = ( "%s/path/to/fs_test/fs_test-%s.x" % ( home, mpi_host )) 
 #
 # fs_test needs a place to create temporary file.
 #
-tmp_dir = "/path/to/tmp"
+tmp_dir = ( "%s/path/to/tmp-%s" % ( home, mpi_host ))
 #
 # The targets of fs_test.
 #
-target_dir1 = "/path/to/file-system/target_dir1"
-target_dirn = "/path/to/file-system/target_dirn"
+target_dirs = [ "/path/to/file-system/target_dir0", "/path/to/file-system/target_dirn" ]
 #
 # Setup the MPI options you want to pass to the MPI launching program, for
 # example, "mpirun" or "aprun".
@@ -65,7 +66,7 @@ program_options = {
 # For N-N runs, the rank of the process creating the file is always appended
 # to the rest of the filename specified here.
 #
-  "target"   : [ "%s/out.%%s" % ( target_dir1 ), "%s/out.%%s" % ( target_dirn ) ],
+  "target"   : [ "%s/out.%%s" % ( target_dirs[0] ), "%s/out.%%s" % ( target_dirs[1] ) ],
 #
 # The size of the data element to be written and/or read.
 #
@@ -223,6 +224,21 @@ program_options = {
 #
 #  "type"  : [ 1 ],
 #
+# If type of I/O is N-N (1), and not PLFS (no "plfs:" in target), then
+# we need to decide into how many subdirectories we want to place the
+# N files. The default is 1 if the argument is not provided, and the
+# files are placed directly into the target directory.
+#
+#  "num_nn_dirs" : [ 1 ],
+#
+# If type of I/O is N-N (1), and not PLFS (no "plfs:" in target), and
+# num_nn_dirs is more than 1, then we need to decide on the prefix name
+# for the subdirectories. The default is "nn_dir", but we can make it
+# any string we want. The prefix will have a string representation of
+# a number appended to it to make "num_nn_dirs" unique subdirectories.
+#
+#  "nn_dir_prefix" : [ 'nn_dir' ],
+#
 # If "type" is 2 (N-1), then this tells whether to make it strided or
 # segmented. Values are:
 #
@@ -231,6 +247,8 @@ program_options = {
 #
 # We typically don't use this here, deferring this to the n1_segmented,
 # n1_strided, and nn parameters below in "get_commands".
+#
+#  "strided" : [ '1' ],
 }
 
 # fs_test doesn't need program_arguments

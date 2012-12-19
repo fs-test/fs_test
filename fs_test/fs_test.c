@@ -58,6 +58,7 @@
 #include <time.h>
 #include <limits.h>
 #include <getopt.h>
+#include <libgen.h>
 #include "mpi.h"
 #include "utilities.h"
 #include "print.h"
@@ -97,6 +98,8 @@ struct myoption mylongopts[] = {
     { "check",      required_argument,  NULL,                           'C',
         "0 don't fill buffer nor verify, 1 check first byte in each block,\n"
         "\t2 check first byte in each page, 3 check every byte"           },
+    { "num_nn_dirs", required_argument,  NULL,                           'd',
+        "For non-PLFS N-N I/O, number of subdirectories for files"        },
     { "errout",     required_argument,  NULL,                            'e',
         "The path to the error file"                                        },
     { "tmpdirname", required_argument, NULL,                            'f',
@@ -141,6 +144,8 @@ struct myoption mylongopts[] = {
         "Whether to do N-N (1) or N-1 (2)"                                  },
     { "experiment", required_argument,  NULL,                           'x',
         "Assign an arbitrary label to this run in the database"             },
+    { "nn_dir_prefix", required_argument,  NULL,                          'X',
+        "For non-PLFS N-N I/O, prefix for subdirectories for files"        },
     { "size",       required_argument,  NULL,                           'z',
         "The size of each object"                                           },
     { "maxoff",       required_argument,  NULL,                           'M',
@@ -168,6 +173,7 @@ struct myoption mylongopts[] = {
 };
 
 char *prog_name = NULL;
+char is_plfs_target = 0;
 
 void 
 print_time(const char *what, struct State *state) {
@@ -344,6 +350,9 @@ int parse_command_line(int my_rank, int argc, char *argv[],
         case 'b':
             params->barriers = strdup( optarg );
             break;
+        case 'd':   
+            params->num_nn_dirs = atoi( optarg );
+            break;
         case 'e':   
             params->efname = strdup( optarg );
             break;
@@ -354,15 +363,23 @@ int parse_command_line(int my_rank, int argc, char *argv[],
             params->tmpdirname = strdup( optarg );
             break;
         case 'g':
-            /*  // don't expand here, do it as needed
-            if ((params->tfname = expand_path(optarg, state->my_rank)) 
-                  == (char *)0) 
-            {
-                fatal_error( state->efptr, state->my_rank, 0, NULL,
-				  "Problem expanding file name %s.\n", optarg );
-            }
-            */
             params->tfname = strdup( optarg );
+            // is_plfs_target is initialized to 0 (zero), or false.
+            if ( strlen( params->tfname ) >= strlen( "plfs:" )) {
+              is_plfs_target = !strncmp( params->tfname, "plfs:", strlen( "plfs:" ));
+            }
+
+            #ifdef HAS_PLFS
+              if ( !is_plfs_target ) {
+                struct stat st_temp;
+                char *tfname_dir_part;
+
+                tfname_dir_part = strdup( params->tfname );
+                tfname_dir_part = dirname( tfname_dir_part );
+                is_plfs_target = !plfs_getattr( NULL, tfname_dir_part, &st_temp, 0 );
+                free( tfname_dir_part );
+              }
+            #endif
             break;
         case 'i':
             params->io_type_str = strdup( optarg );
@@ -497,6 +514,9 @@ int parse_command_line(int my_rank, int argc, char *argv[],
         case 'x':
             params->experiment = strdup( optarg );
             break;
+        case 'X':   
+            params->nn_dir_prefix = strdup( optarg );
+            break;
         case 'z':
             {
                     // parse_size screws with the string and then full_args
@@ -589,6 +609,14 @@ int parse_command_line(int my_rank, int argc, char *argv[],
     check_illogical_args( params, state, 
             params->rank_flag && ! params->read_only_flag,
             "Can only use -rank flag in read-only mode" );
+    /*
+    if ( state->my_rank == 0 ) {
+      fprintf( stderr, "Checking illogical args for num_nn_dirs\n" );
+    }
+    */
+    check_illogical_args( params, state, 
+            (( params->num_nn_dirs>1 ) && ( is_plfs_target || params->io_type==IO_PLFS || params->test_type!=1 )),
+            "Can only use -num_nn_dirs flag for non-PLFS targets using N-N I/O" );
 
     // if no hints were set, free the MPI_Info struct
   if(!(params->info_allocated_flag)){
@@ -621,6 +649,29 @@ set_output( struct Parameters *params, char *path, struct State *state ) {
     return fp;
 }
 
+void
+barrier( struct State *state, struct time_values *times ) 
+{
+    double barrier_start;
+    if ( times ) {
+        barrier_start = MPI_Wtime();
+    }
+    int mpi_ret;
+    if ( (mpi_ret = MPI_Barrier(MPI_COMM_WORLD)) != MPI_SUCCESS ) {
+        fatal_error( state->efptr, state->my_rank, mpi_ret, NULL,
+                "Unable to call MPI_Barrier before write.\n" );
+    }
+    if ( times ) {
+        setTime( &(times->barrier_wait_time),
+            &(times->barrier_wait_start_time),
+            &(times->barrier_wait_end_time),
+            times->barrier_wait_time,
+            MPI_Wtime(), barrier_start,
+            "barrier_wait_time", __FILE__, __LINE__, 
+            state->efptr, state->my_rank );
+    }
+}
+
 int 
 init( int argc, char **argv, struct Parameters *params,
         struct time_values *write_times,
@@ -632,6 +683,9 @@ init( int argc, char **argv, struct Parameters *params,
     int i;
     char my_host[MPI_MAX_PROCESSOR_NAME];
     char *pidch;
+    char *temp_tfname;
+    char *temp_tfname_dir;
+
     memset( params, 0, sizeof( *params ) );
     memset( write_times, 0, sizeof( *write_times ) );
     memset( read_times, 0, sizeof( *read_times ) );
@@ -704,7 +758,7 @@ init( int argc, char **argv, struct Parameters *params,
 
     }
 
-        // set up the output files
+    // set up the output files
     if ( params->efname ) {
         state->efptr = set_output( params, params->efname, state );
     }
@@ -714,42 +768,99 @@ init( int argc, char **argv, struct Parameters *params,
     if ( params->tmpdirname == NULL ) {
         params->tmpdirname = "/tmp";
     }
-        // get other info for the database
+ 
+    // get other info for the database
     collect_additional_config( params, state->my_rank, argc, argv );
     if(!print_input_environment(state->my_rank, 
                   myhost_num, 
                   my_host,
                   params,
-			      state->ofptr, 
+			            state->ofptr, 
                   state->efptr))
     {
         fatal_error( state->efptr, state->my_rank, 0, NULL, 
               "Problem detected printing input and envirnoment variables.\n" );
     }
-    return 0;
-}
 
-void
-barrier( struct State *state, struct time_values *times ) 
-{
-    double barrier_start;
-    if ( times ) {
-        barrier_start = MPI_Wtime();
+    /*
+     * Adjust the tfname for spreading N-N I/O over multiple subdirectories
+     * after all other initialization processing is done.
+     *
+     * First, ensure that we are doing N-N I/O, then that we are not putting
+     * all the files in 1 (one) directory, then that the target is not a PLFS
+     * file system, and finally that we are not using the PLFS API to do the I/O.
+     */
+
+    /*
+    fprintf( stderr, "About to check if we will expand_tfname_for_nn\n" );
+    */
+    if (( params->test_type == 1 )     &&
+        ( params->num_nn_dirs > 1 )    &&
+        ( !is_plfs_target )            &&
+        ( params->io_type != IO_PLFS )) {
+
+      /*
+       * We will insert an expansion string for the subdirectories in which the
+       * N-N I/O files will be found.
+       *
+       * If the user did not provide the nn_dir_prefix argument, after the call
+       * to expand_tfname_for_nn it will have a value loaded in it, the default
+       * value.
+       */
+
+      temp_tfname = params->tfname;
+      /*
+      fprintf( stderr, "Before expand_tfname_for_nn, tfname is \"%s\"\n", params->tfname );
+      fprintf( stderr, "Before expand_tfname_for_nn, nn_dir_prefix is \"%s\"\n", params->nn_dir_prefix );
+      */
+      params->tfname = expand_tfname_for_nn( params->tfname, &( params->nn_dir_prefix ), state );
+      /*
+      fprintf( stderr, "After expand_tfname_for_nn, tfname is \"%s\"\n", params->tfname );
+      fprintf( stderr, "After expand_tfname_for_nn, nn_dir_prefix is \"%s\"\n", params->nn_dir_prefix );
+      */
+
+      /*
+       * Now if we are rank 0 (zero) and we will be writing, we will let rank
+       * 0 create all the subdirectories over which the N-N I/O will be spread.
+       *
+       * All other ranks will barrier and wait for rank 0 to create all the
+       * subdirectories.
+       */
+
+      if ( !params->read_only_flag ) {
+        if ( state->my_rank == 0 ) {
+          temp_tfname_dir = strdup( temp_tfname );
+          temp_tfname_dir = dirname( temp_tfname_dir );
+          /*
+          fprintf( stderr, "Before make_nn_dirs, temp_tfname_dir is \"%s\"\n", temp_tfname_dir );
+          */
+          if ( make_nn_dirs(
+                   temp_tfname_dir,
+                   params->nn_dir_prefix,
+                   params->num_nn_dirs,
+                   state )) {
+            fprintf(
+                state->efptr, 
+                "ERROR [RANK %d]: Problem making non-PLFS N-N I/O subdirectories.\n",
+                state->my_rank);
+            MPI_Finalize();
+            return -6;
+          }
+          /*
+          fprintf( stderr, "After make_nn_dirs. About to free temp_tfname_dir.\n", temp_tfname_dir );
+          */
+          free( temp_tfname_dir );
+
+          barrier( state, NULL );
+        } else {
+          barrier( state, NULL );
+        }
+      }
+
+      free( temp_tfname );
     }
-    int mpi_ret;
-    if ( (mpi_ret = MPI_Barrier(MPI_COMM_WORLD)) != MPI_SUCCESS ) {
-        fatal_error( state->efptr, state->my_rank, mpi_ret, NULL,
-                "Unable to call MPI_Barrier before write.\n" );
-    }
-    if ( times ) {
-        setTime( &(times->barrier_wait_time),
-            &(times->barrier_wait_start_time),
-            &(times->barrier_wait_end_time),
-            times->barrier_wait_time,
-            MPI_Wtime(), barrier_start,
-            "barrier_wait_time", __FILE__, __LINE__, 
-            state->efptr, state->my_rank );
-    }
+
+    return 0;
 }
 
 void
@@ -1547,6 +1658,7 @@ close_file( struct Parameters *params,
                     "Unable to remove file %s.\n", target );
             }
 		}
+
         setTime( &(times->unlink_time ), 
             &(times->unlink_start_time),
             &(times->unlink_end_time),
@@ -1857,16 +1969,23 @@ flatten_file(struct Parameters *p, struct State *s,struct time_values *t) {
     #ifdef HAS_PLFS
         if (s->my_rank==0 || p->test_type==1) {
             if(s->my_rank==0)
-                fprintf(stderr,"%d: Flattening plfs index\n",s->my_rank);
+                fprintf(
+                    s->efptr,
+                    "INFO RANK[%d]: Flattening plfs index\n",s->my_rank);
             double begin_time = MPI_Wtime();
             // have to get any adio prefix: off
-            char *target = expand_path(p->tfname,s->my_rank,p->test_time);
+            char *target = expand_path(
+                             p->tfname,
+                             p->test_time,
+                             p->num_nn_dirs,
+                             s );
             if ( strchr(target,':')) target = strchr(target,':') + 1;
             int ret = plfs_flatten_index(NULL,target);
             if (ret==0) t->plfs_flatten_time = MPI_Wtime()-begin_time;
             if(s->my_rank==0)
-                fprintf(stderr,
-                    "%d: Flattened plfs index of %s in %.2f seconds: %d\n",
+                fprintf(
+                    s->efptr,
+                    "INFO RANK[%d]: Flattened plfs index of %s in %.2f seconds: %d\n",
                     s->my_rank,target,MPI_Wtime()-begin_time,ret);
         }
         barrier( s, NULL );
@@ -1886,7 +2005,7 @@ read_write_file( struct Parameters *params,
     int orig_rank       = state->my_rank;  // save in case we shift
     char *buffer        = NULL;
     const char *op_name = (read_write == WRITE_MODE) ? "Write" : "Read";
-    char *target;
+    char *target, *temp_target1;
     check_buf_time = 0.0;
     struct read_error head;
     struct read_error *tail = &head;
@@ -1902,7 +2021,11 @@ read_write_file( struct Parameters *params,
     }
 
         // create the file path
-    target = expand_path( params->tfname, state->my_rank, params->test_time );
+    target = expand_path(
+               params->tfname,
+               params->test_time,
+               params->num_nn_dirs,
+               state );
     //fprintf( stderr, "Expanded %s --> %s\n", params->tfname, target );
 
         // allocate the buffer
@@ -1995,6 +2118,42 @@ read_write_file( struct Parameters *params,
     {
         fatal_error( state->efptr, state->my_rank, 0, NULL, 
                     "collect_and_print_time routine.\n" );
+    }
+
+    /*
+     * Only attempt to remove the directories if we've ended a write mode
+     * and the write_only_flag is set, or if we've ended a read mode.
+     *
+     * I know that after collect_and_print_time that all pes have had to sync
+     * because collect_and_print_time calls collect_and_print_single_time,
+     * which calls get_min_sum_max, which calls MPI_Reduce, a collective.
+     */
+
+    if (( read_write == READ_MODE )                                  ||
+        (( read_write == WRITE_MODE ) && ( params->write_only_flag ))) {
+    
+      if (( state->my_rank == 0 )        &&
+          ( params->delete_flag )        &&
+          ( params->test_type == 1 )     &&
+          ( params->num_nn_dirs > 1 )    &&
+          ( !is_plfs_target )            &&
+          ( params->io_type != IO_PLFS )) { 
+
+        temp_target1 = strdup( target );
+
+        if ( remove_nn_dirs(
+               dirname( dirname( temp_target1 )),
+               params->nn_dir_prefix,
+               params->num_nn_dirs,
+               state )) {
+          fprintf(
+            state->efptr, 
+            "ERROR [RANK %d]: Problem removing  non-PLFS N-N I/O subdirectories.\n",
+            state->my_rank);
+        }
+
+        free( temp_target1 );
+      }
     }
 
         // now report any read errors

@@ -277,17 +277,371 @@ int string_to_int_array(char *input_string, char *delimiter,
   return(TRUE);
 }
 
+/*
+ * This function fills "nn_dir_num_buf" with a 0 (zero) padded number, whose
+ * total length is equal to "max_num_nn_dirs_len". The buffer should
+ * be pre-allocated and have enough room for that, plus the \0 (NULL) byte at
+ * the end.
+ *
+ * This function returns 0 (zero) on success, -1 otherwise.
+ */
+
+extern int
+make_nn_dir_num_string(
+    char *nn_dir_num_buf,
+    unsigned int nn_dir_num,
+    size_t max_num_nn_dirs_len,
+    struct State *state ) {
+
+  int  ret_val;
+
+  ret_val = sprintf( nn_dir_num_buf, "%0*u", ( int ) max_num_nn_dirs_len, nn_dir_num );
+  if ( ret_val == 0 ) {
+    fprintf(
+        state->efptr,
+        "ERROR: Failed to convert nn_dir_num to a zero-padded string\n" );
+    return -1;
+  }
+
+  return 0;
+}
+
+
+/*
+ * This function allocates memory for and fills "nn_dir_buf" with the concatenation of:
+ *
+ * parent_dir
+ * "/"
+ * nn_dir_prefix
+ * string representation of "nn_dir_num" that is zero-padded to "max_num_nn_dirs_len".
+ *
+ * This function returns 0 (zero) on success, -1 otherwise.
+ *
+ * The caller must free "nn_dir_buf".
+ */
+
+extern int
+make_nn_dir_string(
+    char **nn_dir_buf,
+    char *parent_dir,
+    char *nn_dir_prefix,
+    unsigned int nn_dir_num,
+    size_t max_num_nn_dirs_len,
+    struct State *state ) {
+
+  char temp[33];
+
+
+  if ( make_nn_dir_num_string(
+           temp,
+           nn_dir_num,
+           max_num_nn_dirs_len,
+           state )) {
+    fprintf(
+        state->efptr,
+        "ERROR: Failed to make the nn_dir_num, %u, into a string\n", nn_dir_num );
+    return -1;
+  }
+
+  *nn_dir_buf = ( char * )malloc (
+      strlen( parent_dir )    +
+      strlen( "/" )           +
+      strlen( nn_dir_prefix ) +
+      strlen( temp )          +
+      1 );
+  *nn_dir_buf = strcpy( *nn_dir_buf, parent_dir );
+  *nn_dir_buf = strcat( *nn_dir_buf, "/" );
+  *nn_dir_buf = strcat( *nn_dir_buf, nn_dir_prefix );
+  *nn_dir_buf = strcat( *nn_dir_buf, temp );
+  /*
+  fprintf( stderr, "nn_dir_buf is \"%s\"\n", *nn_dir_buf );
+  */
+
+  return 0;
+}
+
+
+/*
+ * Make the subdirectories for the N-N I/O job under "parent_dir" with the
+ * base name "nn_dir_prefix" and numbers appended to that.
+ *
+ * This function returns 0 if successful, otherwise it prints an error and
+ * returns -1.
+ *
+ * Don't forget to make sure nn_dir_prefix has a value before calling this.
+ */
+
+extern int
+make_nn_dirs(
+    char *parent_dir,
+    char *nn_dir_prefix,
+    unsigned int num_nn_dirs,
+    struct State *state ) {
+
+  struct stat st;
+  char max_num_nn_dirs[33];
+  unsigned int i;
+  size_t max_num_nn_dirs_len;
+  char *nn_dir_str = NULL;
+                    
+
+  /*
+   * Stat the parent directory to get st.st_mode that we will use to set
+   * permissions on the directories we create with mkdir.
+   */
+
+  if ( lstat( parent_dir, &st )) {
+    fprintf(
+        state->efptr,
+        "ERROR: Failed to lstat the directory, \"%s\"\n", parent_dir );
+    return -1;
+  }
+
+  sprintf( max_num_nn_dirs, "%u", num_nn_dirs-1 );
+  max_num_nn_dirs_len = strlen( max_num_nn_dirs );
+
+  /*
+   * We're going to make subdirectories in "parent_dir" whose names are
+   * "nn_dir_prefix" concatenated with integers from 0 to num_nn_dirs-1.
+   */
+
+  for ( i = 0; i < num_nn_dirs; i++ ) {
+    if ( make_nn_dir_string(
+             &nn_dir_str,
+             parent_dir,
+             nn_dir_prefix,
+             i,
+             max_num_nn_dirs_len,
+             state )) {
+      fprintf(
+          state->efptr,
+          "ERROR: Failed to create nn_dir_string in the directory, \"%s\"\n",
+          parent_dir );
+      return -1;
+    }
+
+    /*
+    fprintf( stderr, "About to make the directory \"%s\"\n", nn_dir_str );
+    */
+    if ( mkdir( nn_dir_str, st.st_mode )) {
+      fprintf(
+          state->efptr,
+          "INFO: Failed to create the directory, \"%s\"\n", nn_dir_str );
+      fprintf(
+          state->efptr,
+          "INFO: It may already exist.\n" );
+    }
+    /*
+    fprintf( stderr, "About to free nn_dir_str\n" );
+    */
+
+    free( nn_dir_str );
+
+    /*
+    fprintf( stderr, "Freed nn_dir_str\n" );
+    */
+  }
+  return 0;
+}
+
+
+/*
+ * Remove the subdirectories for the N-N I/O job under "parent_dir" with the
+ * base name "nn_dir_prefix" and numbers appended to that.
+ *
+ * This function returns 0 if successful, otherwise it prints an error and
+ * returns -1.
+ *
+ * Don't forget to make sure nn_dir_prefix has a value before calling this.
+ */
+
+extern int
+remove_nn_dirs(
+    char *parent_dir,
+    char *nn_dir_prefix,
+    unsigned int num_nn_dirs,
+    struct State *state ) {
+
+  char max_num_nn_dirs[33];
+  unsigned int i;
+  size_t max_num_nn_dirs_len;
+  char *nn_dir_str = NULL;
+                    
+
+  sprintf( max_num_nn_dirs, "%u", num_nn_dirs-1 );
+  max_num_nn_dirs_len = strlen( max_num_nn_dirs );
+
+  /*
+   * We're going to remove subdirectories in "parent_dir" whose names are
+   * "nn_dir_prefix" concatenated with integers from 0 to num_nn_dirs-1.
+   */
+
+  for ( i = 0; i < num_nn_dirs; i++ ) {
+    if ( make_nn_dir_string(
+             &nn_dir_str,
+             parent_dir,
+             nn_dir_prefix,
+             i,
+             max_num_nn_dirs_len,
+             state )) {
+      fprintf(
+          state->efptr,
+          "ERROR: Failed to create nn_dir_string to remove it from the directory, \"%s\"\n",
+          parent_dir );
+      return -1;
+    }
+
+    if ( rmdir( nn_dir_str )) {
+      fprintf(
+          state->efptr,
+          "INFO: Failed to remove the directory, \"%s\"\n", nn_dir_str );
+      fprintf(
+          state->efptr,
+          "INFO: It may have other files in it.\n" );
+    }
+    free( nn_dir_str );
+  }
+  return 0;
+}
+
+
+/*
+ * If the user provided a value for nn_dir_prefix, this function does nothing.
+ * If the user did not provide a value for nn_dir_prefix, this function sets
+ * it to the default value.
+ *
+ * This function returns 0 if successful, otherwise it prints an error and
+ * returns -1.
+ */
+
+extern int
+set_nn_dir_prefix(
+    char **nn_dir_prefix,
+    struct State *state ) {
+
+  if (( *nn_dir_prefix == NULL ) || ( strlen( *nn_dir_prefix ) == 0 )) {
+    /*
+     * printf( "nn_dir_prefix is NULL or zero-length.\n" );
+     */
+    *nn_dir_prefix = strdup( "nn_dir" );
+    if ( *nn_dir_prefix == NULL ) {
+      fprintf(
+          state->efptr,
+          "ERROR: Could not allocate memory for nn_dir_prefix\n" );
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+/*
+ * This function takes in path and returns a newly allocated string that is
+ * the concatenation of:
+ * 
+ * dirname( path )
+ * "/"
+ * nn_dir_prefix (if NULL, then the default is "nn_dir"
+ * "%d" (the expansion indicator for the NN dir number calculated in expand_path)
+ * "/"
+ * basename( path )
+ *
+ * Also, if nn_dir_prefix is the NULL or empty string, a default value will be
+ * assigned to it and returned to the caller via a call to set_nn_dir_prefix.
+ */ 
+
 extern char *
-expand_path(char *str, int rank, long timestamp)
+expand_tfname_for_nn(
+    char *path,
+    char **nn_dir_prefix,
+    struct State *state ) {
+
+  char *directory;
+  char *filename;
+  char *new_path;
+                
+
+  /*
+  fprintf( stderr, "Before setting, nn_dir_prefix is \"%s\"\n", nn_dir_prefix );
+  */
+
+  if ( set_nn_dir_prefix( nn_dir_prefix, state )) {
+    fprintf(
+      state->efptr,
+      "ERROR: Failed to set nn_dir_prefix to a string value\n" );
+    return NULL;
+  }
+
+  /*
+  fprintf( stderr, "After setting, nn_dir_prefix is \"%s\"\n", nn_dir_prefix );
+  */
+
+  directory = strdup( path );
+  directory = dirname( directory );
+  /*
+  fprintf( stderr, "directory is \"%s\"\n", directory );
+  */
+
+  filename = strdup( path );
+  filename = basename( filename );
+  /*
+  fprintf( stderr, "filename is \"%s\"\n", filename );
+  */
+
+  /*  
+   * We're going to put a "/" before nn_dir_prefix, then nn_dir_prefix,
+   * then "%d" (the substitution string for the nn_dir_num), and finally
+   * another "/"
+   */
+
+  new_path = ( char * )malloc (
+      strlen( directory )     +   
+      strlen( "/" )           +   
+      strlen( *nn_dir_prefix ) + 
+      strlen( "%d/" )         +   
+      strlen( filename )      +   
+      1 );
+  new_path = strcpy( new_path, directory );
+  new_path = strcat( new_path, "/" );
+  new_path = strcat( new_path, *nn_dir_prefix );
+  new_path = strcat( new_path, "%d/" );
+  new_path = strcat( new_path, filename );
+  /*
+  fprintf( stderr, "new_path is \"%s\"\n", new_path );
+  */
+
+  /*
+   * Calling free on these causes a segmentation fault. Not sure why as
+   * the documentation says that we should be able to free something that
+   * was created with strdup. It must be what dirname and basename do to
+   * that char pointer after the calls to strdup.
+   *
+  free( directory );
+  free( filename );
+  */
+
+  return new_path;
+}
+
+
+extern char *
+expand_path(
+    char *str,
+    long timestamp,
+    unsigned int num_nn_dirs,
+    struct State *state )
 {
   char tmp1[2048];
   char tmp2[1024];
   
   char *p;
   char *q;
+
+  char max_num_nn_dirs[33];
+  size_t max_num_nn_dirs_len;
   
-  //int rank;
   int string_modified = FALSE;
+
   
   if (str == (char *)0) {
     return ((char *)0);
@@ -298,49 +652,65 @@ expand_path(char *str, int rank, long timestamp)
       string_modified = TRUE;
       p++;
       if (*p == '\0') {
-	return ((char *)0);
+        return ((char *)0);
       }
 
       switch (*p) {
       case 'h':
-	if (gethostname(tmp2, sizeof(tmp2) - 1) != 0)
-	  return ((char *)0);
-	tmp2[sizeof(tmp2) - 1] = '\0';
-	strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
-	tmp1[sizeof(tmp1) - 1] = '\0';
-	q += strlen(tmp2);
-	break;
+        if (gethostname(tmp2, sizeof(tmp2) - 1) != 0) {
+          return ((char *)0);
+        }
+        tmp2[sizeof(tmp2) - 1] = '\0';
+        strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
+        tmp1[sizeof(tmp1) - 1] = '\0';
+        q += strlen(tmp2);
+        break;
 
       case 's':
-       snprintf(tmp2, (sizeof(tmp2) - 1), "%ld", timestamp);
-       tmp2[sizeof(tmp2) - 1] = '\0';
-       strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
-       tmp1[sizeof(tmp1) - 1] = '\0';
-       q += strlen(tmp2);
-         break;
-
+        snprintf(tmp2, (sizeof(tmp2) - 1), "%ld", timestamp);
+        tmp2[sizeof(tmp2) - 1] = '\0';
+        strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
+        tmp1[sizeof(tmp1) - 1] = '\0';
+        q += strlen(tmp2);
+        break;
 
       case 'p':
-	snprintf(tmp2, (sizeof(tmp2) - 1), "%d", getpid());
-	tmp2[sizeof(tmp2) - 1] = '\0';
-	strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
-	tmp1[sizeof(tmp1) - 1] = '\0';
-	q += strlen(tmp2);
-	break;
+	      snprintf(tmp2, (sizeof(tmp2) - 1), "%d", getpid());
+	      tmp2[sizeof(tmp2) - 1] = '\0';
+	      strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
+	      tmp1[sizeof(tmp1) - 1] = '\0';
+	      q += strlen(tmp2);
+	      break;
 
       case 'r':
-	//if (MPI_Comm_rank(comm, &rank) != MPI_SUCCESS) {
-	//  return ((char *)0);
-	//}
-	snprintf(tmp2, (sizeof(tmp2) - 1), "%d", rank);
-	tmp2[sizeof(tmp2) - 1] = '\0';
-	strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
-	tmp1[sizeof(tmp1) - 1] = '\0';
-	q += strlen(tmp2);
-	break;
+	      snprintf(tmp2, (sizeof(tmp2) - 1), "%d", state->my_rank);
+	      tmp2[sizeof(tmp2) - 1] = '\0';
+	      strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
+	      tmp1[sizeof(tmp1) - 1] = '\0';
+	      q += strlen(tmp2);
+	      break;
+/*
+ * %d expands to be a zero-padded integer bin into which a rank hashes.
+ * It's intended use is to put a number on which subdirectory
+ * a non-PLFS N-N I/O job will write/read its files.
+ */
+      case 'd':
+        if ( num_nn_dirs > 1 ) {
+          sprintf( max_num_nn_dirs, "%u", num_nn_dirs-1 );
+          max_num_nn_dirs_len = strlen( max_num_nn_dirs );
+          make_nn_dir_num_string(
+              tmp2,
+              ( unsigned int ) ( state->my_rank % num_nn_dirs ),
+              max_num_nn_dirs_len,
+              state );
+	        strncpy(q, tmp2, (sizeof(tmp1) - (q - tmp1) - 1));
+	        tmp1[sizeof(tmp1) - 1] = '\0';
+	        q += strlen(tmp2);
+        }
+	      break;
 
       default:
-	return ((char *)0);
+	      return ((char *)0);
       }
 
       p++;
@@ -351,8 +721,9 @@ expand_path(char *str, int rank, long timestamp)
   }
 
   //fprintf( stderr, "%s: %s -> %s\n", __FUNCTION__, str, tmp1 );
-  if(!string_modified)
+  if(!string_modified) {
     strcpy(tmp1,str);
+  }
 
   return (strdup(tmp1));
 }
