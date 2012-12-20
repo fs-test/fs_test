@@ -243,7 +243,7 @@ main( int argc, char *argv[] )
     if ( params.use_db ) {
         db_insert(state.my_rank, 0, "NULL", &params, &state, NULL, NULL, NULL );
     }
-
+    print_time("end", &state );
     fini( &params, &state );
     return 0;
 }
@@ -729,6 +729,8 @@ init( int argc, char **argv, struct Parameters *params,
                         "processors in MPI_COMM_WORLD.\n", state->my_rank);
         return -4;
     }
+    print_time("begin", state );
+
     // Need the uid
     // now parse the args
     if( !parse_command_line(state->my_rank, argc, argv, params, state ) ) {
