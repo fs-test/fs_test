@@ -346,12 +346,20 @@ int parse_command_line(int my_rank, int argc, char *argv[],
   while ((ch = getopt_long_only( argc, argv,
               getopt_buf, longopts, &index )) != -1 )
   {
+      int temp_int;
+
       switch(ch) {
         case 'b':
             params->barriers = strdup( optarg );
             break;
         case 'd':   
-            params->num_nn_dirs = atoi( optarg );
+            temp_int = atoi( optarg );
+            if ( temp_int < 1 ) {
+              check_illogical_args( params, state, 1,
+                "Invalid value for nn_num_dirs of \"%s\". num_nn_dirs must be a postive integer.", optarg );
+            } else {
+              params->num_nn_dirs = temp_int;
+            }
             break;
         case 'e':   
             params->efname = strdup( optarg );
