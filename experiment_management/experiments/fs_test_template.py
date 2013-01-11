@@ -40,8 +40,8 @@ target_dirs = [ "/path/to/file-system/target_dir0", "/path/to/file-system/target
 #
 mpi_options = {
 #  "N"     : [ pe-count-per-node-1, ..., pe-count-per-node-a ],
-#  "n"    : [ pe-count-1, ..., pe-count-b ]
-#  "np"    : [ pe-count-1, ..., pe-count-c ]
+#  "n"    : [ pe-count-1, ..., pe-count-b ],
+#  "np"    : [ pe-count-1, ..., pe-count-c ],
 }
 #
 # fs_test options

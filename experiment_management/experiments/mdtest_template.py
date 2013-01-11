@@ -31,7 +31,7 @@ program_arguments = [
 # typical use of this framework won't require modification beyond this point
 #############################################################################
 
-def get_command( expr_mgmt_options ):
+def get_commands( expr_mgmt_options ):
   global mpi_options,program_options,program_arguments,mpirun
   commands = expr_mgmt.get_commands( 
       mpi_options=mpi_options,
