@@ -24,6 +24,10 @@ work_dirs = [ "/path/to/file-system/work_dir0", "/path/to/file-system/work_dirn"
 # Setup the MPI options you want to pass to the MPI launching program, for
 # example, "mpirun" or "aprun".
 #
+# We cannot have a constant file count divided by the number of processes
+# in the experiment by defining "n" here, but we do need the variable,
+# mpi_options, to exist. We will then use a custom "make_commands" below.
+#
 mpi_options = {
 #  "N"    : [ pe-count-per-node-1, ..., pe-count-pernode-n ],
 #  "N"    : [ 1 ],
@@ -68,12 +72,20 @@ program_options = {
 # unique directory. This tests the scenario where processes don't have to
 # delay to get a lock on the directory from competing processes.
 #
+# We cannot have a constant file count divided by the number of processes
+# in the experiment by defining "c" here. We will use a custom
+# "make_commands" below.
+#
 #  "c" : [ 102400, 204800 ],
 #
 # Each process creates the number of files specified as the argument in a
 # shared directory. That is, this is N-N where all N processes are using the
 # same, shared directory. This tests the scenario where processes do have to
 # delay to get a lock on the directory from competing processes.
+#
+# We cannot have a constant file count divided by the number of processes
+# in the experiment by defining "C" here. We will use a custom
+# "make_commands" below.
 #
 #  "C" : [ 102400, 204800 ],
 #
@@ -110,9 +122,31 @@ program_options = {
 
 def get_commands( expr_mgmt_options ):
   global mpi_options, mpi_program, program_options
+#
+# Uncomment this section when using mpi_options and "C" (or "c") from above.
+#
   commands = expr_mgmt.get_commands( 
       mpi_options=mpi_options,
       mpi_program=mpi_program,
       program_options=program_options,
       expr_mgmt_options=expr_mgmt_options )
   return commands
+#
+# Comment this section when using mpi_options and "C" from above.
+#
+  #def make_commands():
+  #  return expr_mgmt.get_commands(
+  #      mpi_options=mpi_options,
+  #      mpi_program=mpi_program,
+  #      program_options=program_options,
+  #      expr_mgmt_options=expr_mgmt_options )
+
+  #commands = []
+
+  #for exponent in range ( 0, 11 ):
+  #  np = 2**exponent
+  #  mpi_options['n'] = [ np ]
+  #  program_options['C'] = [ 102400/np ]
+  #  commands += make_commands()
+
+  #return commands

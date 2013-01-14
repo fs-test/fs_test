@@ -7,17 +7,154 @@ mpirun = "/users/user1/mdtest/wrapper.py"
 
 # if you want to use this to run a new test, use the current time,
 # if you want to use this to complete an already started test, use that time
+#
+# We cannot have a constant file count divided by the number of processes
+# in the experiment by defining "n" here, but we do need the variable,
+# mpi_options, to exist. We will then use a custom "make_commands" below.
+#
 mpi_options = {
   "np"   : [ 2, 4 ], 
+#
+# "n" is used on the Crays.
+#
+#  "n"    : [ 2, 4 ],
 }
 
 mpi_program = ( "/users/user1/mdtest/mdtest" ) 
 
 program_options = {
-  "I" : [ 1, 10 ],
+#
+# Branching factor of hierarchical directory structure. See README. It's
+# complicated.
+#
+#  "b" : [ 2 ],
+#
+# Each task times itself. Have noticed bugs where the experiment will
+# fail when using this parameter. Generally, don't use it.
+#
+#  "B" : [ '' ],
+#
+# Collective creates: task 0 does all the creates and deletes.
+#
+#  "c" : [ '' ],
+#
+# Only create files/dirs.
+#
+#  "C" : [ '' ],
+#
+# The directory for the files.
+#
   "d" : [ "pfs/user1/mdtest.out" ], 
-  "z" : [ 1, 2 ],
-  "b" : [ 2 ],
+#
+# Perform tests on directories only (no files).
+#
+#  "D" : [ '' ],
+#
+# First number of tasks on which test will run. I don't understand this and
+# there is no additional explanation in the README.
+#
+#  "f" : [ <integer>?? ],
+#
+# Perform the tests on the files only (no directories).
+#
+  "F" : [ '' ],
+#
+# Number of iterations in the experiment. Default is 1.
+#
+#  "i" : [ 10 ],
+#
+# "n" and "I" are mutually exclusive. In general, we prefer "n" because it
+# creates, stats, and deletes the files in the directory the caller
+# specifies.
+#
+# "I" specifies the number of items per tree node. Use this in conjunction
+# with "b" and "z".
+#
+#  "I" : [ 1, 10 ],
+#
+# Last  number of tasks on which test will run. I don't understand this and
+# there is no additional explanation in the README.
+#
+#  "l" : [ <integer>?? ],
+#
+# Create files and directories at the "leaf" level only.
+#
+#  "L" : [ '' ],
+#
+# "n" and "I" are mutually exclusive. In general, we prefer "n" because it
+# creates, stats, and deletes the files in the directory the caller
+# specifies.
+#
+# Every task will create/stat/delete number of files/dirs specified per tree.
+#
+# We cannot have a constant file count divided by the number of processes
+# in the experiment by defining "n" here. We will use a custom
+# "make_commands" below.
+#
+  "n" : [ 1024 ],
+#
+# Stride number between neighbor tasks for file/dir stat. Make this the number
+# of processes that will run on a node.
+#
+#  "N" : [ 16 ],
+#
+# Pre-iteration delay in seconds.
+#
+#  "p" : [ 10 ],
+#
+# Only remove files/dirs.
+#
+#  "r" : [ '' ],
+#
+# Randomly stat files/dirs (optional seed can be provided).
+#
+#  "R" : [ '' ],
+#
+# Stride between the number of tasks for each test. No other explanation
+# is given. I'm not sure what this does.
+#
+#  "s" : [ 16 ],
+#
+# Shared file access (file only, no directories). For N-1 where all
+# processes operate on the same file.
+#
+#  "S" : [ '' ],
+#
+# Time unique working directory overhead. No other explanation is given.
+# I'm not sure what this does.
+#
+#  "t" : [ '' ],
+#
+# Only stat files/dirs.
+#
+#  "T" : [ '' ],
+#
+# This parameter has each process use its own directory. If you don't
+# use it, all processes use the same, shared, directory.
+#
+#  "u" : [ '' ],
+#
+# Verbosity (each instance of option increments by one). So, you can have:
+# -v, -vv, -vvv, etc.
+#
+#  "v" : [ '' ],
+#
+# Verbosity value. Instead of lots of small "v"s, put an integer after
+# this to specify the verbosity value.
+#
+#  "V" : [ 1 ],
+#
+# Number of bytes to write to each file.
+#
+#  "w" : [ 64 ],
+#
+# Sync file after write completion.
+# 
+#  "y" : [ '' ],
+#
+# Depth of hierarchical directory structure. See README. It's complicated.
+#
+#  "z" : [ 1, 2 ],
 }
 
 # the wrapper looks for these args at the end of the args and splices them
@@ -33,6 +170,9 @@ program_arguments = [
 
 def get_commands( expr_mgmt_options ):
   global mpi_options,program_options,program_arguments,mpirun
+#
+# Uncomment this section when using mpi_options and "n" from above.
+#
   commands = expr_mgmt.get_commands( 
       mpi_options=mpi_options,
       mpi_program=mpi_program,
@@ -41,3 +181,25 @@ def get_commands( expr_mgmt_options ):
       program_options=program_options,
       expr_mgmt_options=expr_mgmt_options )
   return commands
+#
+# Comment this section when using mpi_options and "n" from above.
+#
+  #def make_commands():
+  #  return expr_mgmt.get_commands(
+  #      mpi_options=mpi_options,
+  #      mpi_program=mpi_program,
+  #      program_arguments=program_arguments,
+  #      mpirun=mpirun,
+  #      program_options=program_options,
+  #      expr_mgmt_options=expr_mgmt_options )
+
+  #commands = []
+
+  #for exponent in range ( 0, 11 ):
+  ##for exponent in range ( 6, 7 ):
+  #  np = 2**exponent
+  #  mpi_options['n'] = [ np ]
+  #  program_options['n'] = [ 102400/np ]
+  #  commands += make_commands()
+
+  #return commands
