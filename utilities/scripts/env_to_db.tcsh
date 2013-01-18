@@ -77,6 +77,8 @@ set thread_count = `ps auxw | grep pan | grep kpanfs_thpool | grep -v grep | wc 
 echo "panfs_threads $thread_count"
 
 # get some plfs parameters if possible
+set plfs_ver = `plfs_version | grep -A 1 'PLFS library' | grep Built | awk '{print $1}'`
+echo "plfs_version $plfs_ver"
 foreach file_plfsrc ( $HOME/.plfsrc /etc/plfsrc ) 
   if ( -e $file_plfsrc ) then
     set file = $file_plfsrc
@@ -97,12 +99,6 @@ foreach file_plfsrc ( $HOME/.plfsrc /etc/plfsrc )
        /^mount_point/ {print "plfs_mnt "$2} \
        /^map/ {print "plfs_map "$2} \
       ' $file
-    set pdebug = "$plfs_mnt/.plfsdebug"
-    if ( -e $pdebug ) then
-#      set p_version = `grep -a '^Version' $PLFS/.plfsdebug | sed 's/ /_/g'`
-      set p_version = `cat $plfs_mnt/.plfsdebug | grep -a '^Version' | sed 's/ /_/g'`
-      echo plfs_version $p_version
-    endif
     break
   endif
 end
