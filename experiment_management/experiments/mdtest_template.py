@@ -50,6 +50,14 @@ program_options = {
 #
 #  "D" : [ '' ],
 #
+# Number of bytes to read from each file.
+#
+#  "e" : [ 64 ],
+#
+# Only read files.
+#
+#  "E" : [ '' ],
+#
 # First number of tasks on which test will run. I don't understand this and
 # there is no additional explanation in the README.
 #
