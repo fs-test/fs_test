@@ -1,12 +1,19 @@
-import sys,os,time
+import sys,os,time,getpass
 sys.path += [ './lib', '../lib' ]
 import expr_mgmt
 
+user        = getpass.getuser()
+home        = os.getenv( "HOME" )
+my_mpi_host = os.getenv( "MY_MPI_HOST" )
+
 # the mdtest_wrapper actually calls mpirun so use a non-default mpirun command
-mpirun = "/users/user1/mdtest/wrapper.py"
+mdtest_top = "/usr/projects/ioteam/%s/mdtest-1.8.5/" % ( my_mpi_host )
+mpirun = "%s/scripts/wrapper.py" % ( mdtest_top )
 
 # if you want to use this to run a new test, use the current time,
 # if you want to use this to complete an already started test, use that time
+ts = int( time.time() )
+#ts = 1269097554
 #
 # We cannot have a constant file count divided by the number of processes
 # in the experiment by defining "n" here, but we do need the variable,
@@ -20,7 +27,9 @@ mpi_options = {
 #  "n"    : [ 2, 4 ],
 }
 
-mpi_program = ( "/users/user1/mdtest/mdtest" ) 
+mpi_program = ( "%s/mdtest" % ( mdtest_top )) 
+
+target = ( "/lustre/lscratch/%s/mdtest" % ( user ))
 
 program_options = {
 #
@@ -40,11 +49,11 @@ program_options = {
 #
 # Only create files/dirs.
 #
-#  "C" : [ '' ],
+  "C" : [ '' ],
 #
 # The directory for the files.
 #
-  "d" : [ "pfs/user1/mdtest.out" ], 
+  "d" : [ "%s/mdtest.%d" % ( target, ts ) ], 
 #
 # Perform tests on directories only (no files).
 #
@@ -104,7 +113,7 @@ program_options = {
 # Stride number between neighbor tasks for file/dir stat. Make this the number
 # of processes that will run on a node.
 #
-#  "N" : [ 16 ],
+  "N" : [ 16 ],
 #
 # Pre-iteration delay in seconds.
 #
@@ -112,7 +121,7 @@ program_options = {
 #
 # Only remove files/dirs.
 #
-#  "r" : [ '' ],
+  "r" : [ '' ],
 #
 # Randomly stat files/dirs (optional seed can be provided).
 #
@@ -135,7 +144,7 @@ program_options = {
 #
 # Only stat files/dirs.
 #
-#  "T" : [ '' ],
+  "T" : [ '' ],
 #
 # This parameter has each process use its own directory. If you don't
 # use it, all processes use the same, shared, directory.
@@ -168,9 +177,9 @@ program_options = {
 # the wrapper looks for these args at the end of the args and splices them
 # off before calling IOR, these args are used by the wrapper to get more
 # data into the sql insert
-program_arguments = [
-  [ "--desc ./mdtest.%d" % int(time.time()) ]
-]
+#program_arguments = [
+#  [ "--desc ./mdtest.%d" % int(time.time()) ]
+#]
 
 #############################################################################
 # typical use of this framework won't require modification beyond this point
@@ -184,7 +193,7 @@ def get_commands( expr_mgmt_options ):
   commands = expr_mgmt.get_commands( 
       mpi_options=mpi_options,
       mpi_program=mpi_program,
-      program_arguments=program_arguments,
+#      program_arguments=program_arguments,
       mpirun=mpirun,
       program_options=program_options,
       expr_mgmt_options=expr_mgmt_options )
@@ -196,7 +205,7 @@ def get_commands( expr_mgmt_options ):
   #  return expr_mgmt.get_commands(
   #      mpi_options=mpi_options,
   #      mpi_program=mpi_program,
-  #      program_arguments=program_arguments,
+  ##      program_arguments=program_arguments,
   #      mpirun=mpirun,
   #      program_options=program_options,
   #      expr_mgmt_options=expr_mgmt_options )
