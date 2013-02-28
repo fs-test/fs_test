@@ -305,19 +305,26 @@ def runSerial( command ):
 
 def submit( command, options ): 
   # this is ugly bec it has to parse the command to figure out the
-  # mpirun -np N in order to pass than on to msub.  blech.
+  # aprun -n N, mpirun -np N, or srun -n N in order to pass than on
+  # to msub.  blech.
   # then add in the rest of the m_opts
   if options["nprocs"] == None:
-    # Get the number of processes from the aprun/mpirun command
+    # Get the number of processes from the one of these commands:
+    #   aprun
+    #   mpirun
+    #   srun
     try:
       np = re.compile('.*aprun\s+-n\s+(\d*)').match(command).group(1)
     except AttributeError:
       try:
         np = re.compile('.*mpirun\s+-np?\s+(\d*)').match(command).group(1)
       except AttributeError:
-        print ("Error: Unable to get number of processes from the command "
-          + str(command) + ".")
-        return -1
+        try:
+          np = re.compile('.*srun\s+-n\s+(\d*)').match(command).group(1)
+        except AttributeError:
+          print ("Error: Unable to get number of processes from the command "
+            + str(command) + ".")
+          return -1
   else:
     np = options["nprocs"]
   

@@ -13,7 +13,7 @@ def get_args(argv):
            experiments directory.  The experiment must
            have a .py extension and must define a
            get_commands() function which returns a list
-           of mpirun commands. The experiments directory has
+           of mpirun (or aprun or srun) commands. The experiments directory has
            several example experiments and the README 
            has more information about creating these as well."""
   return expr_mgmt.options_parse( argv=argv, usage=usage,
