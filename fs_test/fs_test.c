@@ -295,7 +295,7 @@ int parse_command_line(int my_rank, int argc, char *argv[],
   int i = 1;
   int index = 0;
   int mpi_ret;
-  char ch;
+  int ch;
   char strtok_buf[65536];
   char getopt_buf[65536];
 
@@ -325,6 +325,12 @@ int parse_command_line(int my_rank, int argc, char *argv[],
       longopts[i].has_arg = mylongopts[i].has_arg;
       longopts[i].flag    = mylongopts[i].flag;
       longopts[i].val     = mylongopts[i].val;
+
+#ifdef _DEBUG_FSTEST
+      if ( my_rank == 0 ) {
+        fprintf( state->efptr, "longopts[%d].name is \"%s\"\n", i, longopts[i].name );
+      }
+#endif
   }
   //if ( my_rank == 0 ) fprintf( stderr, "Built opt buf: %s\n", getopt_buf );
 
@@ -332,9 +338,11 @@ int parse_command_line(int my_rank, int argc, char *argv[],
 * allocate the MPI_Info structure. If no hints are set, the structure 
 * will be freed at the end of this routine.
 ******************************************************************/
-  if( (mpi_ret = MPI_Info_create(&params->info)) != MPI_SUCCESS){
-    if(my_rank == 0) fatal_error( stderr, my_rank, mpi_ret, NULL,
+  if ((mpi_ret = MPI_Info_create(&params->info)) != MPI_SUCCESS){
+    if (my_rank == 0) {
+      fatal_error( stderr, my_rank, mpi_ret, NULL,
 				"Unable to create MPI_info structure.\n");
+    }
   } else {
     params->info_allocated_flag = 1;
   }
@@ -347,6 +355,12 @@ int parse_command_line(int my_rank, int argc, char *argv[],
               getopt_buf, longopts, &index )) != -1 )
   {
       int temp_int;
+
+#ifdef _DEBUG_FSTEST
+      if ( my_rank == 0 ) {
+        fprintf( state->efptr, "Processing a \"%c\" command...\n", ch );
+      }
+#endif
 
       switch(ch) {
         case 'b':
@@ -741,6 +755,13 @@ init( int argc, char **argv, struct Parameters *params,
 
     // Need the uid
     // now parse the args
+
+#ifdef _DEBUG_FSTEST
+    if ( state->my_rank == 0 ) {
+      fprintf( state->efptr, "Calling parse_command_line...\n" );
+    }
+#endif
+
     if( !parse_command_line(state->my_rank, argc, argv, params, state ) ) {
         if ( state->my_rank == 0 ) {
             fprintf(state->efptr, 
