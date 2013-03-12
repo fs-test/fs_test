@@ -53,7 +53,7 @@ program_options = {
 #
 # The directory for the files.
 #
-  "d" : [ "%s/mdtest.%d" % ( target, ts ) ], 
+  "d" : [ "%s/mdtest.%d/" % ( target, ts ) ], 
 #
 # Perform tests on directories only (no files).
 #
