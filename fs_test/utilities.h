@@ -132,6 +132,15 @@ struct read_error {
  */
 
 struct State {
+/* @@@
+ * If we ever implement a mode where N-N I/O can have each process operate
+ * on more than one file, we may need to have an array of file handles
+ * whose size won't be known until we know how many files each process
+ * will use.
+ *
+    int *fds;
+    MPI_File *mpi_fhs;
+*/
     int fd;
     char *error_string;
     MPI_File mpi_fh;
@@ -147,6 +156,14 @@ struct State {
     unsigned ave_objs;
     uid_t uid;
     #ifdef HAS_PLFS
+/* @@@
+ * If we ever implement a mode where N-N I/O can have each process operate
+ * on more than one file, we may need to have an array of file handles
+ * whose size won't be known until we know how many files each process
+ * will use.
+ *
+    Plfs_fd **plfs_fds;
+*/
     Plfs_fd *plfs_fd;
     #endif
 };
@@ -205,7 +222,13 @@ struct Parameters {
   int    time_limit;           /* whether to only run for a fixed time */
   unsigned int num_nn_dirs;    /* Number of directories for non-PLFS N-N I/O files */
   char         *nn_dir_prefix; /* The prefix of the NN directory names for distributing NN I/O */
-
+/* @@@
+ * If we ever implement a mode where N-N I/O can have each process operate
+ * on more than one file, we have to know how many files each process
+ * will use.
+ *
+  unsigned int num_nn_files;   
+*/
   int panfs_info_valid;
   int panfs_type;
   int panfs_stripe;

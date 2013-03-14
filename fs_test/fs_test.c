@@ -94,7 +94,7 @@ struct Parameters params;       /* Parameters passed from user   */
 struct myoption mylongopts[] = {
     { "barriers",   required_argument,  NULL,                            'b',
     "When to barrier.  Comma seperated.\n"
-    "\te.g. -barriers bopen,aopen,bwrite,aread,aclose,btrunc,astat,bsync" },
+    "\te.g. -barriers bopen,aopen,bwrite,awrite,bread,aread,bclose,bsync,async,btrunc,atrunc,bstat,astat,aclose" },
     { "check",      required_argument,  NULL,                           'C',
         "0 don't fill buffer nor verify, 1 check first byte in each block,\n"
         "\t2 check first byte in each page, 3 check every byte"           },
@@ -656,6 +656,72 @@ int parse_command_line(int my_rank, int argc, char *argv[],
     }
 
   }
+
+/* @@@
+ * This section needed to implement a mode where in N-N each process
+ * operates on more than one file.
+ *
+   * If it's N-N and we're doing multiple files per proc, add the ".%i" to
+   * params->tfname. Also, allocate space to store num_nn_files worth of
+   * fds, mpi_fhs, or *plfs_fds; depending on what type of I/O we're doing.
+
+  if (( params->test_type == 1 ) && ( params->num_nn_files > 1 )) {
+    char *tfname_dup;
+    char *temp_tfname;
+
+    temp_tfname = params->tfname;
+    tfname_dup = strdup( params->tfname );
+    params->tfname = ( char * )malloc(
+        strlen( tfname_dup ) +
+        strlen( ".%i" )      +
+        1 );
+    params->tfname = strcpy( params->tfname, tfname_dup );
+    params->tfname = strcat( params->tfname, ".%i" );
+
+     * Calling free on these causes a segmentation fault. Not sure why as
+     * the documentation says that we should be able to free something that
+     * was created with strdup.
+     *
+     * Have to comment out the two "free" calls unless you can figure out
+     * how not to have it crash when they are called.
+     *
+    free( temp_tfname );
+    free( tfname_dup );
+
+    switch( params->io_type ) {
+      case IO_POSIX:
+        state->fds = ( int * )malloc( sizeof( int ) * num_nn_files );
+        break;
+      case IO_MPI:
+        state->mpi_fhs = ( MPI_File * )malloc( sizeof( MPI_File ) * num_nn_files );
+        break;
+      case IO_PLFS:
+#ifdef HAS_PLFS
+        state->plfs_fds = ( Plfs_fd ** )malloc( sizeof( Plfs_fd * ) * num_nn_files );
+#endif
+        break;
+      default:
+        break;
+    }
+  } else {
+    switch( params->io_type ) {
+      case IO_POSIX:
+        state->fds = ( int * )malloc( sizeof( int ));
+        break;
+      case IO_MPI:
+        state->mpi_fhs = ( MPI_File * )malloc( sizeof( MPI_File ));
+        break;
+      case IO_PLFS:
+#ifdef HAS_PLFS
+        state->plfs_fds = ( Plfs_fd ** )malloc( sizeof( Plfs_fd * ));
+#endif
+        break;
+      default:
+        break;
+    }
+    just allocate one element to each of fds, mpi_fhs, and *plfs_fds.
+  }
+*/
   
   return(1);
 }

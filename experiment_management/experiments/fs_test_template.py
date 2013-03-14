@@ -147,10 +147,16 @@ program_options = {
 # aopen - After opening files.
 # bwrite - Before starting to write files.
 # awrite - After finishing to read files.
-# bclose - Before closing files.
-# aclose - After closing files.
 # bread - Before starting to read files.
 # aread - After finishing to read files.
+# bclose - Before closing files.
+# bsync - During close process, before syncing files after writing.
+# async - During close process, after syncing files after writing.
+# btrunc - During close process, before truncating files for N-N I/O
+# atrunc - During close process, after truncating files for N-N I/O
+# bstat - During the close process, before stating files before they are closed.
+# astat - During the close process, after stating files before they are closed.
+# aclose - After closing files.
 #
   "barriers"   : [ 'aopen' ],
 #
