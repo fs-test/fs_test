@@ -81,7 +81,21 @@ int read_write_file( struct Parameters *params,
             struct time_values *times,
             struct State *state,
             int read_write );
+#ifdef HAS_PLFS
+/*
+ * This function can only be called if the following are all true:
+ *   params->plfs_flatten is non-zero (true)
+ *   is_plfs_target is non-zero (true)
+ *   params->test_type == 2 (N-1 I/O)
+ *
+ * This call in parse_command_line ensures these conditions are all true:
+ *   check_illogical_args( params, state, 
+ *          (( params->plfs_flatten ) && ( !is_plfs_target || params->test_type != 2 )),
+ *          "Can only use -flatten flag for PLFS targets using N-1 I/O" );
+ */
+
 void flatten_file( struct Parameters *,struct State *, struct time_values *);
+#endif
 void fini( struct Parameters *params, struct State *state );
 void Usage( struct Parameters *params, struct State *state, char *field,
             char *missing );
@@ -226,8 +240,11 @@ main( int argc, char *argv[] )
         }
     }
 
+#ifdef HAS_PLFS
     // flatten and/or sleep as directed  (flatten is a weird plfs thing)
     if (params.plfs_flatten) flatten_file(&params,&state,&read_times);
+#endif
+
     if (params.sleep_seconds) sleep(params.sleep_seconds); 
 
     // read the file
@@ -378,9 +395,11 @@ int parse_command_line(int my_rank, int argc, char *argv[],
         case 'e':   
             params->efname = strdup( optarg );
             break;
+#ifdef HAS_PLFS
         case 'F':
             params->plfs_flatten = atoi(optarg);
             break;
+#endif
         case 'f':
             params->tmpdirname = strdup( optarg );
             break;
@@ -631,6 +650,9 @@ int parse_command_line(int my_rank, int argc, char *argv[],
     check_illogical_args( params, state, 
             params->rank_flag && ! params->read_only_flag,
             "Can only use -rank flag in read-only mode" );
+    check_illogical_args( params, state, 
+            (( params->plfs_flatten ) && ( !is_plfs_target || params->test_type != 2 )),
+            "Can only use -flatten flag for PLFS targets using N-1 I/O" );
     /*
     if ( state->my_rank == 0 ) {
       fprintf( stderr, "Checking illogical args for num_nn_dirs\n" );
@@ -2061,33 +2083,61 @@ report_errs( struct State *state, struct read_error *head ) {
     }
 }
 
+#ifdef HAS_PLFS
+/*
+ * This function can only be called if the following are all true:
+ *   params->plfs_flatten is non-zero (true)
+ *   is_plfs_target is non-zero (true)
+ *   params->test_type == 2 (N-1 I/O)
+ *
+ * This call in parse_command_line ensures these conditions are all true:
+ *   check_illogical_args( params, state, 
+ *          (( params->plfs_flatten ) && ( !is_plfs_target || params->test_type != 2 )),
+ *          "Can only use -flatten flag for PLFS targets using N-1 I/O" );
+ */
+
 void
-flatten_file(struct Parameters *p, struct State *s,struct time_values *t) {
-    #ifdef HAS_PLFS
-        if (s->my_rank==0 || p->test_type==1) {
-            if(s->my_rank==0)
-                fprintf(
-                    s->efptr,
-                    "INFO RANK[%d]: Flattening plfs index\n",s->my_rank);
-            double begin_time = MPI_Wtime();
-            // have to get any adio prefix: off
-            char *target = expand_path(
-                             p->tfname,
-                             p->test_time,
-                             p->num_nn_dirs,
-                             s );
-            if ( strchr(target,':')) target = strchr(target,':') + 1;
-            int ret = plfs_flatten_index(NULL,target);
-            if (ret==0) t->plfs_flatten_time = MPI_Wtime()-begin_time;
-            if(s->my_rank==0)
-                fprintf(
-                    s->efptr,
-                    "INFO RANK[%d]: Flattened plfs index of %s in %.2f seconds: %d\n",
-                    s->my_rank,target,MPI_Wtime()-begin_time,ret);
-        }
-        barrier( s, NULL );
-    #endif
+flatten_file( struct Parameters *p, struct State *s, struct time_values *t ) {
+
+  double begin_time;
+  char *target;
+  int ret;
+
+
+  if( s->my_rank == 0 ) {
+    fprintf(
+        s->efptr,
+        "INFO RANK[%d]: Flattening plfs index\n", s->my_rank );
+  }
+
+  begin_time = MPI_Wtime();
+
+  /*
+   * have to get any adio prefix: off
+   */
+
+  target = expand_path( p->tfname, p->test_time, p->num_nn_dirs, s );
+
+  if ( strchr( target, ':' )) {
+    target = strchr( target, ':' ) + 1;
+  }
+
+  ret = plfs_flatten_index( NULL, target );
+
+  if ( ret == 0) {
+    t->plfs_flatten_time = MPI_Wtime()-begin_time;
+  }
+
+  if ( s->my_rank == 0 ) {
+    fprintf(
+        s->efptr,
+        "INFO RANK[%d]: Flattened plfs index of %s in %.2f seconds: %d\n",
+        s->my_rank, target,MPI_Wtime()-begin_time, ret );
+  }
+
+  barrier( s, NULL );
 }
+#endif
 
 int
 read_write_file( struct Parameters *params,
