@@ -8,7 +8,7 @@ my_mpi_host = os.getenv( "MY_MPI_HOST" )
 
 # the mdtest_wrapper actually calls mpirun so use a non-default mpirun command
 mdtest_top = "/usr/projects/ioteam/%s/mdtest-1.8.5/" % ( my_mpi_host )
-mpirun = "%s/scripts/wrapper.py" % ( mdtest_top )
+mpirun = "%s/scripts/mdtest_wrapper.py aprun" % ( mdtest_top )
 
 # if you want to use this to run a new test, use the current time,
 # if you want to use this to complete an already started test, use that time
