@@ -77,8 +77,11 @@ set thread_count = `ps auxw | grep pan | grep kpanfs_thpool | grep -v grep | wc 
 echo "panfs_threads $thread_count"
 
 # get some plfs parameters if possible
-set plfs_ver = `plfs_version | grep -A 1 'PLFS library' | grep Built | awk '{print $1}'`
+plfs_version >& ./version.out
+set plfs_ver = `cat ./version.out | grep -A 1 'PLFS library' | grep Built | awk '{print $2}' | sed -e 's/"//'`
+rm -f ./version.out
 echo "plfs_version $plfs_ver"
+
 foreach file_plfsrc ( $HOME/.plfsrc /etc/plfsrc ) 
   if ( -e $file_plfsrc ) then
     set file = $file_plfsrc
