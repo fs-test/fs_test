@@ -40,7 +40,12 @@ SRCS_THREADS = nton_plfs_thread_db.c utilities.c hashtable.c hashtable_itr.c boo
 OBJS_FS_TEST=$(SRCS_FS_TEST:.c=.o)
 OBJS_THREADS=$(SRCS_THREADS:.c=.o)
 
+# do not build nton_plfs_thread_db if plfs not configured
+ifneq (,$(findstring HAS_PLFS,$(MPI_INC)))
 all:    $(TARGET_FS_TEST) $(TARGET_THD)
+else
+all:    $(TARGET_FS_TEST)
+endif
 
 $(TARGET_FS_TEST):	$(OBJS_FS_TEST) 
 	$(CC) $(CFLAGS) $(OBJS_FS_TEST) ${MPI_LD} -o $(TARGET_FS_EXE)
