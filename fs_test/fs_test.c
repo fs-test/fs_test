@@ -1331,6 +1331,8 @@ read_write_buf( struct Parameters *params,
            int read_write ) 
 {
     int ret, success = 0;
+    plfs_error_t plfs_ret = PLFS_SUCCESS;
+    ssize_t bytes;
     MPI_Status io_stat;
     MPI_Status *status = NULL;
     const char *op_name = (read_write == WRITE_MODE) ? "write" : "read";
@@ -1419,14 +1421,14 @@ read_write_buf( struct Parameters *params,
         case IO_PLFS:
             #ifdef HAS_PLFS
             if ( read_write == WRITE_MODE ) {
-                ret = plfs_write( state->plfs_fd, buffer, params->obj_size, 
-                        offset, state->my_rank );
+                plfs_ret = plfs_write( state->plfs_fd, buffer, params->obj_size, 
+                        offset, state->my_rank, &bytes );
             } else {
-                ret = plfs_read( state->plfs_fd, buffer, params->obj_size,
-                        offset );
+                plfs_ret = plfs_read( state->plfs_fd, buffer, params->obj_size,
+                        offset, &bytes );
             }
-            if ( ret < 0 )                 errno = -ret;
-            if ( ret == params->obj_size ) success = 1;
+            if ( plfs_ret != PLFS_SUCCESS )        errno = plfs_error_to_errno(plfs_ret);
+            if ( bytes == params->obj_size ) success = 1;
             #endif
             break;
         default:
@@ -1690,6 +1692,7 @@ close_file( struct Parameters *params,
     wait_start = MPI_Wtime();
     success = 0;
     int flags;
+    plfs_error_t plfs_ret = PLFS_SUCCESS;
     switch( params->io_type ) {
         case IO_POSIX:
             mpi_ret = close( state->fd );
@@ -1703,10 +1706,10 @@ close_file( struct Parameters *params,
             #ifdef HAS_PLFS
             flags = ( read_write == READ_MODE ? 
                         O_RDONLY : O_CREAT | O_WRONLY );
-            mpi_ret = plfs_close(state->plfs_fd,state->my_rank,state->uid,
-                    flags,NULL);
-            if ( mpi_ret == 0 ) success = 1;
-            else errno = -mpi_ret;
+            plfs_ret = plfs_close(state->plfs_fd,state->my_rank,state->uid,
+                    flags,NULL, &flags);
+            if ( plfs_ret == PLFS_SUCCESS ) success = 1;
+            else errno = plfs_error_to_errno(plfs_ret);
             #endif
             break;
         default:
