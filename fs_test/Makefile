@@ -10,7 +10,7 @@ LARGE_FILE  = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE=1 \
 # get MPI_CC, MPI_INC, MY_MPI_HOST, and MPI_LD from environment
 # MY_MPI_HOST is needed to specify cluster name for the database inserts
 # MPI_INC and MPI_LD can be used for various different settings such as plfs:
-# MPI_INC = -DHAS_PLFS -I/path/to/plfs/include , 
+# MPI_INC = -DHAS_PLFS -I/path/to/plfs/include 
 # MPI_LD = -L/path/to/plfs/lib -lplfs -lstdc++
 ifdef MPI_CC 
 	CC		= ${MPI_CC}	
