@@ -1331,7 +1331,9 @@ read_write_buf( struct Parameters *params,
            int read_write ) 
 {
     int ret, success = 0;
+    #ifdef HAS_PLFS
     plfs_error_t plfs_ret = PLFS_SUCCESS;
+    #endif
     ssize_t bytes;
     MPI_Status io_stat;
     MPI_Status *status = NULL;
@@ -1692,7 +1694,9 @@ close_file( struct Parameters *params,
     wait_start = MPI_Wtime();
     success = 0;
     int flags;
+    #ifdef HAS_PLFS
     plfs_error_t plfs_ret = PLFS_SUCCESS;
+    #endif
     switch( params->io_type ) {
         case IO_POSIX:
             mpi_ret = close( state->fd );
