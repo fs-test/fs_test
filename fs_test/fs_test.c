@@ -1429,7 +1429,10 @@ read_write_buf( struct Parameters *params,
                 plfs_ret = plfs_read( state->plfs_fd, buffer, params->obj_size,
                         offset, &bytes );
             }
-            if ( plfs_ret != PLFS_SUCCESS )        errno = plfs_error_to_errno(plfs_ret);
+            if ( plfs_ret != PLFS_SUCCESS ) {
+                errno = plfs_error_to_errno(plfs_ret);
+                ret = errno; // copy errno into ret
+            }
             if ( bytes == params->obj_size ) success = 1;
             #endif
             break;
