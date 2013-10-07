@@ -376,6 +376,8 @@ worker(void *arg)
     }
     rw_in_time = MPI_Wtime();
     i = 0;
+    plfs_error_t plfs_ret;
+    ssize_t bytes;
     // loop to write or read blocks of data to file
     while (i < worker_defs->blocks) {
         // check if barrier before each write/read 
@@ -391,8 +393,8 @@ worker(void *arg)
         }
         // write data to file
         if (worker_defs->wflag == 1) {
-            ret = plfs_write( pfd, buf, worker_defs->blocksize, i*worker_defs->blocksize, 0 );
-            if (ret != worker_defs->blocksize) {
+            plfs_ret = plfs_write( pfd, buf, worker_defs->blocksize, i*worker_defs->blocksize, 0, &bytes );
+            if (plfs_ret != PLFS_SUCCESS || bytes != worker_defs->blocksize) {
                 perror("write");
                 fprintf(stderr,"%d write error \n",worker_defs->rank);
                 MPI_Abort(MPI_COMM_WORLD,-1);
@@ -401,8 +403,8 @@ worker(void *arg)
         } 
         // else, read data from file
         else {
-            ret = plfs_read( pfd, buf, worker_defs->blocksize, i*worker_defs->blocksize );
-            if (ret != worker_defs->blocksize) {
+            plfs_ret = plfs_read( pfd, buf, worker_defs->blocksize, i*worker_defs->blocksize, &bytes );
+            if (plfs_ret != PLFS_SUCCESS || bytes != worker_defs->blocksize) {
                 perror("read");
                 fprintf(stderr,"%d read error \n",worker_defs->rank);
                 MPI_Abort(MPI_COMM_WORLD,-1);
@@ -429,9 +431,10 @@ worker(void *arg)
 
     close_in_time = MPI_Wtime();
     // close file written
+    int flags;
     if (worker_defs->wflag == 1) {
-        ret = plfs_close(pfd, 0, 0, O_WRONLY ,NULL);
-        if (ret != 0) {
+        plfs_ret = plfs_close(pfd, 0, 0, O_WRONLY ,NULL, &flags);
+        if (plfs_ret != PLFS_SUCCESS) {
             perror("closewrite");
             fprintf(stderr,"%d write open error on %s\n",worker_defs->rank,wpath);
             MPI_Abort(MPI_COMM_WORLD,-1);
@@ -440,8 +443,8 @@ worker(void *arg)
     }
     // close file read
     else {
-        ret = plfs_close(pfd, 0, 0, O_RDONLY ,NULL);
-        if (ret != 0) {
+        plfs_ret = plfs_close(pfd, 0, 0, O_RDONLY ,NULL, &flags);
+        if (plfs_ret != PLFS_SUCCESS) {
             perror("closeread");
             fprintf(stderr,"%d write open error on %s\n",worker_defs->rank,wpath);
             MPI_Abort(MPI_COMM_WORLD,-1);
