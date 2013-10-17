@@ -1697,6 +1697,7 @@ close_file( struct Parameters *params,
     wait_start = MPI_Wtime();
     success = 0;
     int flags;
+    int open_handles;
     #ifdef HAS_PLFS
     plfs_error_t plfs_ret = PLFS_SUCCESS;
     #endif
@@ -1714,7 +1715,7 @@ close_file( struct Parameters *params,
             flags = ( read_write == READ_MODE ? 
                         O_RDONLY : O_CREAT | O_WRONLY );
             plfs_ret = plfs_close(state->plfs_fd,state->my_rank,state->uid,
-                    flags,NULL, &flags);
+                    flags,NULL, &open_handles);
             if ( plfs_ret == PLFS_SUCCESS ) success = 1;
             else errno = plfs_error_to_errno(plfs_ret);
             #endif
