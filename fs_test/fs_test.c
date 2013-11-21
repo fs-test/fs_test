@@ -405,22 +405,40 @@ int parse_command_line(int my_rank, int argc, char *argv[],
             break;
         case 'g':
             params->tfname = strdup( optarg );
-            // is_plfs_target is initialized to 0 (zero), or false.
+/*
+ * Even if we're not using the PLFS library, e.g. -DHAS_PLFS was not used,
+ * we may be passed a PLFS target to use through the MPI/IO interface, which
+ * at this time requires the filename to be prepended with "plfs:".
+ *
+ * is_plfs_target is initialized to 0 (zero), or false.
+ */
             if ( strlen( params->tfname ) >= strlen( "plfs:" )) {
               is_plfs_target = !strncmp( params->tfname, "plfs:", strlen( "plfs:" ));
             }
 
-            #ifdef HAS_PLFS
+#ifdef HAS_PLFS
               if ( !is_plfs_target ) {
-                struct stat st_temp;
-                char *tfname_dir_part;
+                is_plfs_target = is_plfs_path( params->tfname );
 
-                tfname_dir_part = strdup( params->tfname );
-                tfname_dir_part = dirname( tfname_dir_part );
-                is_plfs_target = !plfs_getattr( NULL, tfname_dir_part, &st_temp, 0 );
-                free( tfname_dir_part );
+/*
+ * This was the old way to tell if the path was a PLFS path.
+ *
+ *              struct stat st_temp;
+ *              char *tfname_dir_part;
+ *              plfs_error_t plfs_ret;
+ *
+ *              tfname_dir_part = strdup( params->tfname );
+ *              tfname_dir_part = dirname( tfname_dir_part );
+ *              plfs_ret = plfs_getattr( NULL, tfname_dir_part, &st_temp, 0 );
+ *              if ( plfs_ret == PLFS_SUCCESS ) {
+ *                is_plfs_target = 1; // true
+ *              } else {
+ *                is_plfs_target = 0; // false
+ *              }
+ *              free( tfname_dir_part );
+ */
               }
-            #endif
+#endif
             break;
         case 'i':
             params->io_type_str = strdup( optarg );
@@ -429,12 +447,12 @@ int parse_command_line(int my_rank, int argc, char *argv[],
             } else if ( !strcmp( optarg, "posix" ) ) {
                 params->io_type = IO_POSIX;
             } else if ( !strcmp( optarg, "plfs" ) ) {
-                #ifdef HAS_PLFS
+#ifdef HAS_PLFS
                     params->io_type = IO_PLFS;
-                #else
+#else
                     check_illogical_args( params, state, 1,
                         "Can't do PLFS io unless built with -DHAS_PLFS." );
-                #endif
+#endif
             } else {
                     check_illogical_args( params, state, 1,
                     "Unknown io type %s.  Use posix|mpi|plfs.", optarg );
@@ -928,11 +946,14 @@ init( int argc, char **argv, struct Parameters *params,
        */
 
       temp_tfname = params->tfname;
+
       /*
       fprintf( stderr, "Before expand_tfname_for_nn, tfname is \"%s\"\n", params->tfname );
       fprintf( stderr, "Before expand_tfname_for_nn, nn_dir_prefix is \"%s\"\n", params->nn_dir_prefix );
       */
+
       params->tfname = expand_tfname_for_nn( params->tfname, &( params->nn_dir_prefix ), state );
+
       /*
       fprintf( stderr, "After expand_tfname_for_nn, tfname is \"%s\"\n", params->tfname );
       fprintf( stderr, "After expand_tfname_for_nn, nn_dir_prefix is \"%s\"\n", params->nn_dir_prefix );
@@ -1210,7 +1231,7 @@ open_file(  struct Parameters *params,
 		
       break;
     case IO_PLFS:
-      #ifdef HAS_PLFS
+#ifdef HAS_PLFS
       // later can optimize this especially if -collective is passed
       // like ad_plfs_open: first w/ 0, then 1 per node, then everyone else
 		
@@ -1225,8 +1246,7 @@ open_file(  struct Parameters *params,
       }
 
       state->plfs_fd = NULL;
-      int ret = plfs_open(&(state->plfs_fd), target, 
-              posix_mode, state->my_rank, 0666,NULL);
+      plfs_error_t plfs_ret = plfs_open( &(state->plfs_fd), target, posix_mode, state->my_rank, 0666, NULL );
 
       // For N-1 write, Rank 0 waits for the other ranks to open the file after it has.
       if (( read_write == WRITE_MODE ) &&
@@ -1235,13 +1255,14 @@ open_file(  struct Parameters *params,
         barrier(state,times);
       }
 
-      if ( ret == 0 ) {
+      if ( plfs_ret == PLFS_SUCCESS ) {
         success = 1;
       } else {
-        errno = -ret;
+        errno = plfs_error_to_errno( plfs_ret );
+        mpi_ret = errno;
       }
 
-      #endif
+#endif
       break;
     default:
         break;
@@ -1331,9 +1352,9 @@ read_write_buf( struct Parameters *params,
            int read_write ) 
 {
     int ret, success = 0;
-    #ifdef HAS_PLFS
+#ifdef HAS_PLFS
     plfs_error_t plfs_ret = PLFS_SUCCESS;
-    #endif
+#endif
     ssize_t bytes;
     MPI_Status io_stat;
     MPI_Status *status = NULL;
@@ -1421,20 +1442,23 @@ read_write_buf( struct Parameters *params,
             if ( ret == MPI_SUCCESS ) success = 1;
             break;
         case IO_PLFS:
-            #ifdef HAS_PLFS
+#ifdef HAS_PLFS
             if ( read_write == WRITE_MODE ) {
-                plfs_ret = plfs_write( state->plfs_fd, buffer, params->obj_size, 
+              plfs_ret = plfs_write( state->plfs_fd, buffer, params->obj_size, 
                         offset, state->my_rank, &bytes );
             } else {
-                plfs_ret = plfs_read( state->plfs_fd, buffer, params->obj_size,
+              plfs_ret = plfs_read( state->plfs_fd, buffer, params->obj_size,
                         offset, &bytes );
             }
-            if ( plfs_ret != PLFS_SUCCESS ) {
-                errno = plfs_error_to_errno(plfs_ret);
-                ret = errno; // copy errno into ret
+            if ( plfs_ret == PLFS_SUCCESS ) {
+              if ( bytes == params->obj_size ) {
+                success = 1;
+              }
+            } else {
+              errno = plfs_error_to_errno(plfs_ret);
+              ret = errno; // copy errno into ret
             }
-            if ( bytes == params->obj_size ) success = 1;
-            #endif
+#endif
             break;
         default:
             fatal_error( state->efptr, state->my_rank, ret, NULL,
@@ -1559,12 +1583,16 @@ get_file_size( struct State *state, struct Parameters *params,
             if ( ret == MPI_SUCCESS ) success = 1;
             break;
         case IO_PLFS:
-            #ifdef HAS_PLFS
-            ret = plfs_getattr( state->plfs_fd, target, &buf, 1 );
+#ifdef HAS_PLFS
+            plfs_error_t plfs_ret = plfs_getattr( state->plfs_fd, target, &buf, 1 );
             *filesize = buf.st_size;
-            if ( ret == 0 ) success = 1;
-            else errno = -ret;
-            #endif
+            if ( plfs_ret == PLFS_SUCCESS ) {
+              success = 1;
+            } else {
+              errno = plfs_error_to_errno( plfs_ret );
+              ret = errno; // copy errno into ret
+            }
+#endif
             break;
         default:
             break;
@@ -1599,11 +1627,15 @@ close_file( struct Parameters *params,
                 if ( mpi_ret == MPI_SUCCESS ) success = 1;
                 break;
             case IO_PLFS:
-                #ifdef HAS_PLFS
-//                mpi_ret = plfs_sync( state->plfs_fd, state->my_rank ); 
-                mpi_ret = plfs_sync( state->plfs_fd ); 
-                if ( mpi_ret == 0 ) success = 1;
-                #endif
+#ifdef HAS_PLFS
+                plfs_error_t plfs_ret = plfs_sync( state->plfs_fd ); 
+                if ( plfs_ret == PLFS_SUCCESS ) {
+                  success = 1;
+                } else {
+                  errno = plfs_error_to_errno( plfs_ret );
+                  mpi_ret = errno; // copy errno into ret
+                }
+#endif
                 break;
             default:
                 fatal_error( state->efptr, state->my_rank, mpi_ret, NULL, 
@@ -1639,12 +1671,15 @@ close_file( struct Parameters *params,
                 if ( mpi_ret == MPI_SUCCESS ) success = 1;
                 break;
             case IO_PLFS:
-                #ifdef HAS_PLFS
-                // for PLFS versions prior to 2.1, there is no 4th arg here
-                mpi_ret = plfs_trunc( state->plfs_fd, target, 0, 1 );
-                if ( mpi_ret == 0 ) success = 1;
-                else errno = -mpi_ret;
-                #endif
+#ifdef HAS_PLFS
+                plfs_error_t plfs_ret = plfs_trunc( state->plfs_fd, target, 0, 1 );
+                if ( plfs_ret == PLFS_SUCCESS ) {
+                  success = 1;
+                } else {
+                  errno = plfs_error_to_errno( plfs_ret );
+                  mpi_ret = errno; // copy errno into ret
+                }
+#endif
                 break;
             default:
                 break;
@@ -1698,9 +1733,7 @@ close_file( struct Parameters *params,
     success = 0;
     int flags;
     int open_handles;
-    #ifdef HAS_PLFS
-    plfs_error_t plfs_ret = PLFS_SUCCESS;
-    #endif
+
     switch( params->io_type ) {
         case IO_POSIX:
             mpi_ret = close( state->fd );
@@ -1711,14 +1744,17 @@ close_file( struct Parameters *params,
             if ( mpi_ret == MPI_SUCCESS ) success = 1;
             break;
         case IO_PLFS:
-            #ifdef HAS_PLFS
+#ifdef HAS_PLFS
             flags = ( read_write == READ_MODE ? 
                         O_RDONLY : O_CREAT | O_WRONLY );
-            plfs_ret = plfs_close(state->plfs_fd,state->my_rank,state->uid,
-                    flags,NULL, &open_handles);
-            if ( plfs_ret == PLFS_SUCCESS ) success = 1;
-            else errno = plfs_error_to_errno(plfs_ret);
-            #endif
+            plfs_error_t plfs_ret = plfs_close(state->plfs_fd,state->my_rank,state->uid, flags,NULL, &open_handles);
+            if ( plfs_ret == PLFS_SUCCESS ) {
+              success = 1;
+            } else {
+              errno = plfs_error_to_errno(plfs_ret);
+              mpi_ret = errno;
+            }
+#endif
             break;
         default:
             break;
@@ -1774,11 +1810,15 @@ close_file( struct Parameters *params,
                     if( mpi_ret == MPI_SUCCESS) success = 1;
                     break;
                 case IO_PLFS:
-                    #ifdef HAS_PLFS
-                    mpi_ret = plfs_unlink( target );
-                    if ( mpi_ret == 0 ) success = 1;
-                    else errno = -mpi_ret;
-                    #endif
+#ifdef HAS_PLFS
+                    plfs_error_t plfs_ret = plfs_unlink( target );
+                    if ( plfs_ret == PLFS_SUCCESS ) {
+                      success = 1;
+                    } else {
+                      errno = plfs_error_to_errno(plfs_ret);
+                      mpi_ret = errno;
+                    }
+#endif
                     break;
                 default:
                     break;
@@ -2112,7 +2152,7 @@ flatten_file( struct Parameters *p, struct State *s, struct time_values *t ) {
 
   double begin_time;
   char *target;
-  int ret;
+  plfs_error_t plfs_ret;
 
 
   if( s->my_rank == 0 ) {
@@ -2133,9 +2173,9 @@ flatten_file( struct Parameters *p, struct State *s, struct time_values *t ) {
     target = strchr( target, ':' ) + 1;
   }
 
-  ret = plfs_flatten_index( NULL, target );
+  plfs_ret = plfs_flatten_index( NULL, target );
 
-  if ( ret == 0) {
+  if ( plfs_ret == PLFS_SUCCESS) {
     t->plfs_flatten_time = MPI_Wtime()-begin_time;
   }
 
