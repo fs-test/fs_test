@@ -1583,6 +1583,8 @@ get_file_size( struct State *state, struct Parameters *params,
             if ( ret == MPI_SUCCESS ) success = 1;
             break;
         case IO_PLFS:
+        // brackets scope plfs_err_t within this case statement
+        {   
 #ifdef HAS_PLFS
             plfs_error_t plfs_ret = plfs_getattr( state->plfs_fd, target, &buf, 1 );
             *filesize = buf.st_size;
@@ -1594,6 +1596,7 @@ get_file_size( struct State *state, struct Parameters *params,
             }
 #endif
             break;
+        } 
         default:
             break;
     }
@@ -1627,6 +1630,8 @@ close_file( struct Parameters *params,
                 if ( mpi_ret == MPI_SUCCESS ) success = 1;
                 break;
             case IO_PLFS:
+            // brackets scope plfs_err_t within this case statement
+            {
 #ifdef HAS_PLFS
                 plfs_error_t plfs_ret = plfs_sync( state->plfs_fd ); 
                 if ( plfs_ret == PLFS_SUCCESS ) {
@@ -1642,6 +1647,7 @@ close_file( struct Parameters *params,
                         "%s Unknown io type %s\n", __FUNCTION__, 
                         params->io_type_str );
                 break;
+            }
         }
         if ( ! success )  {
             fatal_error( state->efptr, state->my_rank, mpi_ret, NULL, 
@@ -1671,6 +1677,8 @@ close_file( struct Parameters *params,
                 if ( mpi_ret == MPI_SUCCESS ) success = 1;
                 break;
             case IO_PLFS:
+            // brackets scope plfs_err_t within this case statement
+            {
 #ifdef HAS_PLFS
                 plfs_error_t plfs_ret = plfs_trunc( state->plfs_fd, target, 0, 1 );
                 if ( plfs_ret == PLFS_SUCCESS ) {
@@ -1681,6 +1689,7 @@ close_file( struct Parameters *params,
                 }
 #endif
                 break;
+            }
             default:
                 break;
         }
@@ -1810,6 +1819,8 @@ close_file( struct Parameters *params,
                     if( mpi_ret == MPI_SUCCESS) success = 1;
                     break;
                 case IO_PLFS:
+                // brackets scope plfs_err_t within this case statement
+                {
 #ifdef HAS_PLFS
                     plfs_error_t plfs_ret = plfs_unlink( target );
                     if ( plfs_ret == PLFS_SUCCESS ) {
@@ -1820,6 +1831,8 @@ close_file( struct Parameters *params,
                     }
 #endif
                     break;
+                 
+                }
                 default:
                     break;
             }
@@ -2183,7 +2196,7 @@ flatten_file( struct Parameters *p, struct State *s, struct time_values *t ) {
     fprintf(
         s->efptr,
         "INFO RANK[%d]: Flattened plfs index of %s in %.2f seconds: %d\n",
-        s->my_rank, target,MPI_Wtime()-begin_time, ret );
+        s->my_rank, target,MPI_Wtime()-begin_time, plfs_ret );
   }
 
   barrier( s, NULL );
