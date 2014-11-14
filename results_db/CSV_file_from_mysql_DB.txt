@@ -1,0 +1,19 @@
+1) Figure out the query you want and put it in a file to be used as input to mysql. For example, here's a file, testquery.sql:
+
+select io_type,num_procs_io,total_size_mb,write_total_time from experiment;
+
+2) Use that input file to execute the command on the remote system's MySQL database. Our MySQL database is on a system called phpmyadmin.lanl.gov. The results will be returned as tab-delimited fields, but we will pipe the output to sed to change the tab delimiters to comma delimiters.
+
+% mysql -h phpmyadmin.lanl.gov -u brettk --password=hpciodb -D mpi_io_test_pro < testquery.sql | sed 's/\t/,/g' > out.csv
+
+3) Now you have a CSV file that can be read directly with Excel, for example. Using Excel you can create graphs as desired.
+
+
+If you have access to a file system that the MySQL server mounts, there's a direct way to do this. For example, to do the above, you'd execute this command when in the database:
+
+select io_type,num_procs_io,total_size_mb,write_total_time from experiment into outfile '/users/brettk/out.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n'
+
+You would, of course, first login to the database like this:
+
+% mysql -h phpmyadmin.lanl.gov -u brettk --password=hpciodb -D mpi_io_test_pro
+
