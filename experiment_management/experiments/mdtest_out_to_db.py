@@ -463,7 +463,7 @@ def parseOutput(output, db_data):
                 if (i==(length-4)):
                     db_data['tree_creation_max'] = line_toks[i]
                 elif (i==(length-3)):
-                    db_data['tree_creation__min'] = line_toks[i]
+                    db_data['tree_creation_min'] = line_toks[i]
                 elif (i==(length-2)):
                     db_data['tree_creation_mean'] = line_toks[i]
                 elif (i==(length-1)):
@@ -475,7 +475,7 @@ def parseOutput(output, db_data):
                 if (i==(length-4)):
                     db_data['tree_removal_max'] = line_toks[i]
                 elif (i==(length-3)):
-                    db_data['tree_removal__min'] = line_toks[i]
+                    db_data['tree_removal_min'] = line_toks[i]
                 elif (i==(length-2)):
                     db_data['tree_removal_mean'] = line_toks[i]
                 elif (i==(length-1)):
