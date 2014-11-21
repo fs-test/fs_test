@@ -14,7 +14,7 @@
 # 
 # ./run_expr.py -w 1800 -d msub -M '-j oe -V' 
 #     --post=/turquoise/users/atorrez/working-wrappers/fs_test \
-             /experiment_management/experiments/process_output.sh \
+#             /experiment_management/experiments/process_output.sh \
 #     -c experiments/mdtest_rrz.py
 #
 #   Note:  Full path to post script and db_path must be specified
