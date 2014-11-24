@@ -1,0 +1,61 @@
+Background:
+IOR and mdtest previously relied on a wrapper script that was responsible for
+running IOR and mdtest within experiment management.  This wrapper was needed
+because it executed an external script that gathhered information about
+the environment and panfs.  It's primary function was to parse the test output 
+stream and create a MySQl insert command with all resultant fields.   
+
+Testing using this method was limited and file management became a problem.
+For this reason, we have come up with a new method for gathering output and
+placing it into our MySQL database.
+
+New Test Method:
+The new method uses a python script to parse the output from the 
+run_expr.py generated output file (post processed). These files are located in the 
+experiments directory and are named:
+
+mdtest_out_to_db.py
+ior_out_to_db.py
+
+They can be executed as follows:
+
+./mdtest_out_to_db.py --file test_output_file --db_file_path path 
+./ior_out_to_db.py --file test_output_file --db_file_path path 
+
+The arguments to both scripts are identical and specify the output_file 
+to parse and the path to the location of the sql file that will contain
+database insert commands.  The db file can then be sourced
+within our database: mpi_io_test_pro on phpmyadmin.lanl.gov 
+
+This experiments directory also has a bash shell script (process_output.sh) 
+that looks for the most recent output files and runs the appropiate parse script 
+mentioned above.  The script determines if the output file contains IOR
+output or mdtest output.  This works nicely with the run_expr.py --post 
+argument which allows for running a script when a specific run is complete.  
+In other words the database file is being updated as the tests 
+are running (if you have a series of dependent jobs queued).
+
+IOR example running post script to create db files:
+
+./run_expr.py -w 1800 -d msub -M '-j oe -V' --post=/turquoise/users/atorrez/working-wrappers/fs_test/experiment_management/experiments/process_output.sh -c experiments/ior_rrz_nn.py
+
+
+MDTEST  example running post script to create db files:
+
+./run_expr.py -w 1800 -d msub -M '-j oe -V' --post=/turquoise/users/atorrez/working-wrappers/fs_test/experiment_management/experiments/process_output.sh -c experiments/mdtest_rrz.py
+
+Notes:
+
+1)  When using run_expr with the --post option, the full path to the script must be specified.
+
+2)  process_output.sh contains three path variables that must be edited.
+    a) expr_mgmt_top - path to top level experiment_managment directory 
+        e.g.  /users/atorrez/Testing/fs_test/experiment_management
+    b) ior_db_path - path to ior sql file 
+        e.g. /users/atorrez/sql_files/ior
+        ior.sql_query file will be created/appended in this directory
+        this file is then sourced in MySQL
+    c) mdtest_db_path - path to mdtest sql file
+        e.g. /users/atorrez/sql_files/mdtest
+        mdtest.sql_query file will be created/appended in this directory
+        this file is then sourced in MySQL

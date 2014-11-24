@@ -8,7 +8,7 @@
 # insert command which is written to ior.sql_query in your home directory.
 #
 # To run this program:
-# ior_out_to_db.py --file ior_output_file 
+# ior_out_to_db.py --file ior_output_file --db_file_path path 
 #
 # Last modified:  11/19/2014
 ############################################################################
@@ -36,10 +36,10 @@ passwd = "hpciopwd"
 def main():
     
     # check for minimum number of arguments
-    if (len(sys.argv) != 3):
-        print "Your command needs to have one arguement:  --file"
+    if (len(sys.argv) != 5):
+        print "Your command needs to have two arguements"
         print "It should look something like this:"
-        print "python ior_out_to_db.py --file ior_output_file"
+        print "python ior_out_to_db.py --file ior_output_file --db_file_path path"
         sys.exit()
 
     #  look for arguments
@@ -48,6 +48,10 @@ def main():
              index = sys.argv.index(a) + 1
              if (index < len(sys.argv)):
                 out_file = sys.argv[index]
+        if ( a == '--db_file_path'):
+             index = sys.argv.index(a) + 1
+             if (index < len(sys.argv)):
+                db_path = sys.argv[index]
 
     # open the output file for reading
     file = open(out_file, "r")
@@ -60,7 +64,7 @@ def main():
 
     parseOutput(ior_output, db_data)
 
-    db_insert(db, db_data)
+    db_insert(db, db_data, db_path)
 
     # same data, formatted for gnuplot this time
     #if (not db_data['run_time_error']):
@@ -82,6 +86,7 @@ def initDictionary(db_data):
     #       parsed from IOR output, but <user> isn't going to get any
     #       easier to conjure up than it is right now.
     db_data['user'] = os.getenv('USER')
+    db_data['mpihost'] = os.getenv('MY_MPI_HOST')
     db_data['system'] = None
     db_data['date_ts'] = None
 
@@ -167,7 +172,7 @@ def initDictionary(db_data):
 
     # initialize system output
     db_data['mpihome'] = None
-    db_data['mpihost'] = None
+    #db_data['mpihost'] = None
     db_data['mpi_version'] = None
     db_data['segment'] = None
     db_data['os_version'] = None
@@ -406,6 +411,16 @@ def parseOutput(output, db_data):
         # parsing "access" output-section (elapsed times)
         # NOTE: This is also where errors will happen
         elif canParseAccess:
+            if (line.startswith('write')):
+                line_tokens = line.split()
+                db_data['write_open_time'] = line_tokens[4]
+                db_data['write_wrrd_time'] = line_tokens[5]
+                db_data['write_close_time'] = line_tokens[6]
+            elif (line.startswith('read')):
+                line_tokens = line.split()
+                db_data['read_open_time'] = line_tokens[4]
+                db_data['read_wrrd_time'] = line_tokens[5]
+                db_data['read_close_time'] = line_tokens[6]
 
             # TBD ...
             if (line.startswith('Operation')):
@@ -574,7 +589,7 @@ def parseParams(argArray, db_data):
 
 # creates db insert query from db_data dictionary
 # then executes query
-def db_insert(dbconn, db_data):
+def db_insert(dbconn, db_data, db_path):
 
     # create insert query
     query = "INSERT INTO " + table + " ("
@@ -625,7 +640,8 @@ def db_insert(dbconn, db_data):
 
     except:
 
-        sql_file = os.getenv('HOME') + "/ior.sql_query"
+        #sql_file = os.getenv('HOME') + "/ior.sql_query"
+        sql_file = db_path + "/ior.sql_query"
 
         # if unable to connect to db, print query to file sql_query
         try:
