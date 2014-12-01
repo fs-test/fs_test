@@ -20,6 +20,7 @@ import array
 import string
 import time
 import user
+import re
 import MySQLdb as db
 from optparse import OptionParser
 
@@ -370,7 +371,15 @@ def parseOutput(output, db_data):
                 date_time = time.strptime(date_str, "%a %b %d %H:%M:%S %Y")
                 epoch     = int(time.mktime(date_time));
                 db_data['date_ts'] = epoch
-                db_data['yyyymmdd'] = str(date_time.tm_year) + str(date_time.tm_mon) + str(date_time.tm_mday)
+                if (date_time.tm_mon < 10 or date_time.tm_mday < 10 ):    
+                    if (date_time.tm_mon < 10 and date_time.tm_mday < 10 ):    
+                        db_data['yyyymmdd'] = str(date_time.tm_year) + '0' + str(date_time.tm_mon) + '0' + str(date_time.tm_mday)
+                    elif (date_time.tm_mon < 10): 
+                        db_data['yyyymmdd'] = str(date_time.tm_year) + '0' + str(date_time.tm_mon) + str(date_time.tm_mday)
+                    elif (date_time.tm_mday < 10 ):
+                        db_data['yyyymmdd'] = str(date_time.tm_year) + str(date_time.tm_mon) + '0' + str(date_time.tm_mday)
+                else:  
+                    db_data['yyyymmdd'] = str(date_time.tm_year) + str(date_time.tm_mon) + str(date_time.tm_mday)
             elif (tokens[0] == 'Machine:'):
                 db_data['system'] = tokens[2]
 
@@ -385,6 +394,7 @@ def parseOutput(output, db_data):
             if (len(tokens) == 0):
                 canParseSummary = False
                 canParseAccess = True
+                parseAccessBWOnly = False
 
             # in case "access" section is not always present ...
             elif (line.startswith('Operation')):
@@ -404,14 +414,21 @@ def parseOutput(output, db_data):
                 db_data['block_size'] = int(tokens[2]) * parseUnits(tokens[3])
 
             elif (tokens[0] == 'aggregate'):
-                db_data['aggregate_size'] = int(tokens[3]) * parseUnits(tokens[4])
+                db_data['aggregate_size'] = float(tokens[3]) * parseUnits(tokens[4])
+            elif (tokens[0] == 'Using' and tokens[1] == 'stonewalling'):
+                db_data['deadline_for_stonewalling'] = tokens[3]
 
 
 
         # parsing "access" output-section (elapsed times)
         # NOTE: This is also where errors will happen
         elif canParseAccess:
-            if (line.startswith('write')):
+            if re.match("WARNING: Expected aggregate file size",line):
+               parseAccessBWOnly = True 
+            elif (line.startswith('write') and parseAccessBWOnly):
+                line_tokens = line.split()
+                db_data['write_data_rate_mean'] = line_tokens[1]
+            elif (line.startswith('write')):
                 line_tokens = line.split()
                 db_data['write_open_time'] = line_tokens[4]
                 db_data['write_wrrd_time'] = line_tokens[5]
@@ -435,11 +452,12 @@ def parseOutput(output, db_data):
         elif (canParseOps):
             if (line.startswith('write')):
                 line_tokens = line.split()
-                db_data['write_data_rate_max'] = line_tokens[1]
-                db_data['write_data_rate_min'] = line_tokens[2]
-                db_data['write_data_rate_mean'] = line_tokens[3]
-                db_data['write_data_rate_std_dev'] = line_tokens[4]
-                db_data['write_time_mean'] = line_tokens[5]
+                if ( not parseAccessBWOnly):
+                    db_data['write_data_rate_max'] = line_tokens[1]
+                    db_data['write_data_rate_min'] = line_tokens[2]
+                    db_data['write_data_rate_mean'] = line_tokens[3]
+                    db_data['write_data_rate_std_dev'] = line_tokens[4]
+                    db_data['write_time_mean'] = line_tokens[5]
 
                 db_data['num_tasks'] = line_tokens[7]
                 db_data['procs_per_node'] = line_tokens[8] # WARNING: probly sposed to be processors
