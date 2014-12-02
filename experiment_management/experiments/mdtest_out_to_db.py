@@ -325,7 +325,16 @@ def parseOutput(output, db_data):
             date_time = time.strptime(date_str, "%m/%d/%Y %H:%M:%S --")
             epoch     = int(time.mktime(date_time));
             db_data['date_ts'] = epoch
-            db_data['yyyymmdd'] = str(date_time.tm_year) + str(date_time.tm_mon) + str(date_time.tm_mday)
+            if (date_time.tm_mon < 10 or date_time.tm_mday < 10 ):
+                if (date_time.tm_mon < 10 and date_time.tm_mday < 10 ):
+                    db_data['yyyymmdd'] = str(date_time.tm_year) + '0' + str(date_time.tm_mon) + '0' + str(date_time.tm_mday)
+                elif (date_time.tm_mon < 10):
+                    db_data['yyyymmdd'] = str(date_time.tm_year) + '0' + str(date_time.tm_mon) + str(date_time.tm_mday)
+                elif (date_time.tm_mday < 10 ):
+                    db_data['yyyymmdd'] = str(date_time.tm_year) + str(date_time.tm_mon) + '0' + str(date_time.tm_mday)
+            else:
+                db_data['yyyymmdd'] = str(date_time.tm_year) + str(date_time.tm_mon) + str(date_time.tm_mday)
+            #db_data['yyyymmdd'] = str(date_time.tm_year) + str(date_time.tm_mon) + str(date_time.tm_mday)
         if (line.startswith('mdtest')):
             line_toks = line.split(' ')
             db_data['mdtest_version'] = line_toks[0]
