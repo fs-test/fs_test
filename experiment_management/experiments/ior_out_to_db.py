@@ -334,6 +334,7 @@ def parseOutput(output, db_data):
     canParseAccess  = False
     canParseOps     = False
     finished        = False
+    parseAccessBWOnly = False
 
     for line in lines:
 
@@ -394,7 +395,6 @@ def parseOutput(output, db_data):
             if (len(tokens) == 0):
                 canParseSummary = False
                 canParseAccess = True
-                parseAccessBWOnly = False
 
             # in case "access" section is not always present ...
             elif (line.startswith('Operation')):
@@ -407,14 +407,15 @@ def parseOutput(output, db_data):
             elif (tokens[0] == 'test' and tokens[1] == 'filename'):
                 db_data['test_file'] = tokens[3]
 
-            elif (tokens[0] == 'xfersize'):
-                db_data['transfer_size'] = int(tokens[2]) * parseUnits(tokens[3])
+            # Comment out the following since they are populated later
+            #elif (tokens[0] == 'xfersize'):
+            #    db_data['transfer_size'] = int(tokens[2]) * parseUnits(tokens[3])
 
-            elif (tokens[0] == 'blocksize'):
-                db_data['block_size'] = int(tokens[2]) * parseUnits(tokens[3])
+            #elif (tokens[0] == 'blocksize'):
+            #    db_data['block_size'] = float(tokens[2]) * parseUnits(tokens[3])
 
-            elif (tokens[0] == 'aggregate'):
-                db_data['aggregate_size'] = float(tokens[3]) * parseUnits(tokens[4])
+            #elif (tokens[0] == 'aggregate'):
+            #    db_data['aggregate_size'] = float(tokens[3]) * parseUnits(tokens[4])
             elif (tokens[0] == 'Using' and tokens[1] == 'stonewalling'):
                 db_data['deadline_for_stonewalling'] = tokens[3]
 
@@ -425,6 +426,10 @@ def parseOutput(output, db_data):
         elif canParseAccess:
             if re.match("WARNING: Expected aggregate file size",line):
                parseAccessBWOnly = True 
+            elif re.match("WARNING: Using actual aggregate bytes moved", line):
+                line_tokens = line.split()
+                if not (db_data['aggregate_size']):
+                    db_data['aggregate_size'] = int(line_tokens[7][0:-1])
             elif (line.startswith('write') and parseAccessBWOnly):
                 line_tokens = line.split()
                 db_data['write_data_rate_mean'] = line_tokens[1]
@@ -458,6 +463,7 @@ def parseOutput(output, db_data):
                     db_data['write_data_rate_mean'] = line_tokens[3]
                     db_data['write_data_rate_std_dev'] = line_tokens[4]
                     db_data['write_time_mean'] = line_tokens[5]
+                    db_data['aggregate_size'] = line_tokens[18]  # see "Summary:"
 
                 db_data['num_tasks'] = line_tokens[7]
                 db_data['procs_per_node'] = line_tokens[8] # WARNING: probly sposed to be processors
@@ -467,7 +473,7 @@ def parseOutput(output, db_data):
                 db_data['segment_count'] = line_tokens[15]
                 db_data['block_size'] = line_tokens[16]      # see "Summary:"
                 db_data['transfer_size'] = line_tokens[17]   # see "Summary:"
-                db_data['aggregate_size'] = line_tokens[18]  # see "Summary:"
+                #db_data['aggregate_size'] = line_tokens[18]  # see "Summary:"
                 
             elif (line.startswith('read')):
                 line_tokens = line.split()
@@ -485,7 +491,8 @@ def parseOutput(output, db_data):
                 db_data['segment_count'] = line_tokens[15]
                 db_data['block_size'] = line_tokens[16]      # see "Summary:"
                 db_data['transfer_size'] = line_tokens[17]   # see "Summary:"
-                db_data['aggregate_size'] = line_tokens[18]  # see "Summary:"
+                if ( not parseAccessBWOnly):
+                    db_data['aggregate_size'] = line_tokens[18]  # see "Summary:"
 
             elif (line.startswith('Finished')):
                 finished = True
