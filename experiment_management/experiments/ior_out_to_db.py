@@ -10,7 +10,7 @@
 # To run this program:
 # ior_out_to_db.py --file ior_output_file --db_file_path path 
 #
-# Last modified:  11/19/2014
+# Last modified:  12/2/2014
 ############################################################################
 
 import getopt
