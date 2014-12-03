@@ -9,7 +9,7 @@
 # To run this program:
 # mdtest_out_to_db.py --file mdtest_output_file --db_file_path path 
 #
-# Last modified:  11/21/2014
+# Last modified:  12/2/2014
 #
 ############################################################################
 
