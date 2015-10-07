@@ -333,7 +333,9 @@ def submit( command, options ):
   if options["dispatch"] == "msub":
     m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] ) 
   elif options["dispatch"] == "qsub":
-    m_opts = "-l mppwidth=%d,mppnppn=%d" % ( pe, options["ppn"] )
+    #m_opts = "-l mppwidth=%d,mppnppn=%d" % ( pe, options["ppn"] )
+    # Old arguments are deprecated
+    m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] )
   if options["msub"] is not None: 
     m_opts += " %s" % options["msub"]
   if options["chain"] is True and options["lastjob"] is not None: 
