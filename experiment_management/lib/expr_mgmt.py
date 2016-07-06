@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-import os,sys,re,datetime,math,random,ConfigParser
+import os,sys,re,datetime,math,random,ConfigParser,time,tempfile
 from subprocess import Popen,PIPE
 from optparse import make_option,OptionParser,OptionGroup
 
@@ -279,6 +279,7 @@ def dispatch_commands( commands, options ):
         options["lastjob"] = submit(command,options)
         if options["lastjob"] == -1:
             return -1
+        time.sleep(1)
     else: raise SyntaxError, "Usage: unknown dispatch %s" % options["dispatch"]
     dispatched = dispatched+1
     if options["limit"] is not None and dispatched >= options["limit"]: break
@@ -314,7 +315,8 @@ def submit( command, options ):
     #   mpirun
     #   srun
     try:
-      np = re.compile('.*aprun\s+-n\s+(\d*)').match(command).group(1)
+      #np = re.compile('.*aprun\s+-n\s+(\d*)').match(command).group(1)
+      np = re.compile('.*aprun.*-n\s+(\d*)').match(command).group(1)
     except AttributeError:
       try:
         np = re.compile('.*mpirun\s+-np?\s+(\d*)').match(command).group(1)
@@ -334,7 +336,6 @@ def submit( command, options ):
     m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] ) 
   elif options["dispatch"] == "qsub":
     #m_opts = "-l mppwidth=%d,mppnppn=%d" % ( pe, options["ppn"] )
-    # Old arguments are deprecated
     m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] )
   if options["msub"] is not None: 
     m_opts += " %s" % options["msub"]
@@ -343,28 +344,50 @@ def submit( command, options ):
   if options["walltime"] is not None: 
     m_opts += " -l walltime=%s" % options["walltime"]
 
+  # Setting the use_datawarp flag to True will add a #DW directive to the job script 
+  # and submit to msub/qsub via a file rather than a pipe.
+  use_datawarp = False 
+
   # get the set of commands to run in the msub script from the possible
   # prescript, the definite command, and the possible postscript
   mcommands = [] 
+  if use_datawarp: 
+    #mcommands.append( "#DW jobdw type=scratch access_mode=striped capacity=128TiB" )
+    mcommands.append( "#DW jobdw type=scratch access_mode=striped capacity=12TiB" )
+    mcommands.append( "echo \"# Using Directive %s\"" % mcommands )
   for mcommand in [ options["prescript"], command, options["postscript"] ]:
     if mcommand is not None:
       mcommands.append( "echo \"# Running %s\"" % mcommand )
       mcommands.append( mcommand )
   mcommand = "\n".join(mcommands)
 
+  if use_datawarp:
+    tmp = tempfile.NamedTemporaryFile(delete=False)
+    tmp.write(mcommand)
+    tmp.flush()
+    os.fsync(tmp.fileno())
+    m_opts += " " + tmp.name
+
   # now open pipes to submit it, to get the jobid, and to check for error 
   try:
     print "options: " + m_opts 
     problem = False
     ch = Popen(["%s %s" % ( options["dispatch"],m_opts )],shell=True,stdin=PIPE,stdout=PIPE,stderr=PIPE)
-    ch.stdin.write(mcommand)
-    ch.stdin.close()
+    if not use_datawarp:
+      ch.stdin.write(mcommand)
+      ch.stdin.close()
     ch.wait()
+    if use_datawarp: os.remove(tmp.name)
     out = ch.stdout.read().strip()
     try: 
 #    if options["dispatch"] == "msub": jobid = int(out)
 #    else: jobid=out
-     jobid=out
+     if use_datawarp:
+       jobs = out.split()
+       jobid = jobs[1]
+     else: 
+       jobid=out
+
     except (TypeError, ValueError, OverflowError):
       print "Problem with msub/qsub output: " + out
       problem = True
