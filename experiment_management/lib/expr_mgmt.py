@@ -358,6 +358,8 @@ def submit( command, options ):
   for mcommand in [ options["prescript"], command, options["postscript"] ]:
     if mcommand is not None:
       mcommands.append( "echo \"# Running %s\"" % mcommand )
+      mcommands.append( "echo \"# MSUB options: %s\"" % m_opts )
+      mcommands.append( "echo \"# run command: %s\"" % options["runcommand"])
       mcommands.append( mcommand )
   mcommand = "\n".join(mcommands)
 
