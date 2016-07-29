@@ -21,7 +21,7 @@ def options_parse(argv=None, usage=None, description=None, version=None,
     """
     # A list of all options that experiment_management can deal with.
     expr_mgmt_options = [ "runcommand", "dispatch", "iterations", "random",
-        "limit", "quiet", "outdir", "ppn", "msub", "walltime", "lastjob",
+        "limit", "quiet", "use_datawarp", "outdir", "ppn", "msub", "walltime", "lastjob",
         "chain", "prescript", "postscript", "nprocs" ]
 
     # Create the options dictionary that will be used throughout the rest
@@ -36,6 +36,7 @@ def options_parse(argv=None, usage=None, description=None, version=None,
     options["iterations"] = 1
     options["random"] = False
     options["quiet"] = False
+    options["use_datawarp"] = False 
    
     try:
     
@@ -165,6 +166,9 @@ def clp_parse( argv=None, usage=None, description=None, version=None,
     make_option("-q", "--quiet", 
       help="suppress printing the commands [default=%default]",
       action="store_true", default=defaults["quiet"]),
+    make_option("-b", "--use_datawarp", 
+      help="use a datawarp target for the benchmark run [default=%default]",
+      action="store_true", default=defaults["use_datawarp"]),
     ]
 
   msub_opts = [
@@ -346,12 +350,13 @@ def submit( command, options ):
 
   # Setting the use_datawarp flag to True will add a #DW directive to the job script 
   # and submit to msub/qsub via a file rather than a pipe.
-  use_datawarp = False 
+  #use_datawarp = False 
 
   # get the set of commands to run in the msub script from the possible
   # prescript, the definite command, and the possible postscript
   mcommands = [] 
-  if use_datawarp: 
+  
+  if options["use_datawarp"] is True: 
     #mcommands.append( "#DW jobdw type=scratch access_mode=striped capacity=128TiB" )
     mcommands.append( "#DW jobdw type=scratch access_mode=striped capacity=12TiB" )
     mcommands.append( "echo \"# Using Directive %s\"" % mcommands )
@@ -363,7 +368,7 @@ def submit( command, options ):
       mcommands.append( mcommand )
   mcommand = "\n".join(mcommands)
 
-  if use_datawarp:
+  if options["use_datawarp"] is True:
     tmp = tempfile.NamedTemporaryFile(delete=False)
     tmp.write(mcommand)
     tmp.flush()
@@ -375,16 +380,16 @@ def submit( command, options ):
     print "options: " + m_opts 
     problem = False
     ch = Popen(["%s %s" % ( options["dispatch"],m_opts )],shell=True,stdin=PIPE,stdout=PIPE,stderr=PIPE)
-    if not use_datawarp:
+    if options["use_datawarp"] is False:
       ch.stdin.write(mcommand)
       ch.stdin.close()
     ch.wait()
-    if use_datawarp: os.remove(tmp.name)
+    if options["use_datawarp"] is True: os.remove(tmp.name)
     out = ch.stdout.read().strip()
     try: 
 #    if options["dispatch"] == "msub": jobid = int(out)
 #    else: jobid=out
-     if use_datawarp:
+     if ["options[use_datawarp"] is True :
        jobs = out.split()
        jobid = jobs[1]
      else: 
