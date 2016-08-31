@@ -21,8 +21,9 @@ def options_parse(argv=None, usage=None, description=None, version=None,
     """
     # A list of all options that experiment_management can deal with.
     expr_mgmt_options = [ "runcommand", "dispatch", "iterations", "random",
-        "limit", "quiet", "use_datawarp", "outdir", "ppn", "msub", "walltime", "lastjob",
-        "chain", "prescript", "postscript", "nprocs" ]
+        "limit", "quiet", "use_datawarp", "outdir", "ppn", "knlppn", 
+        "haswellppn", "msub", "walltime", "lastjob", "chain", "prescript", 
+        "postscript", "nprocs" ]
 
     # Create the options dictionary that will be used throughout the rest
     # of experiment_management. Initialize all options to None.
@@ -199,6 +200,17 @@ def clp_parse( argv=None, usage=None, description=None, version=None,
       "number of nodes to request. If not specified, the calculation will "
       "be done based on the generated mpi run command (default).",
       type="int", default = defaults["nprocs"]),
+    make_option("-k", "--knlppn", metavar="K",
+       help="Specify how many KNL processors to request.  Used to calculate " 
+       "number of nodes to request.  If not specified, Haswell nodes will be "
+       "used based on options specified",
+       type="int", default=defaults["knlppn"]),
+    make_option("-z", "--haswellppn", metavar="Z",
+       help="Only used with -k (--knlppn) option. Specify how many Haswell " 
+       "processors to request whan also specifying KNL nodes (mixed processor "
+       "run - KNL + Haswell).  If not specified, Haswell or other processor "
+       "will run the job based on supplied options",
+       type="int", default=defaults["haswellppn"]),
   ]
 
   parser = OptionParser( usage=usage, version=version, option_list=option_list,
@@ -267,15 +279,43 @@ def dispatch_commands( commands, options ):
   # default ppn or ppn passed in with -p option.  The change was needed
   # here because of -list option
   for command in commands:
+    # if cray type aprun
     if options["runcommand"] == 'aprun' and options["nprocs"] == None:
       np_cnt = re.compile('.*aprun\s+-n\s+(\d*)').match(command).group(1)
       pes = float(np_cnt)
-      if options["ppn"] > pes:
-          ppn = pes
+
+      # Trinity allows for runs on KNL only, Haswell only and on
+      # both KNL and Haswell.  The KNL+HASWELL option  complicates things 
+      # because now have to look at aprun -n for knl and apun -n for 
+      # Haswell
+      # KNL only 
+      if options["knlppn"] != None and options["haswellppn"] == None:
+        aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, options["knlppn"])
+        command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
+
+      # KNL + HASWELL
+      elif options["knlppn"] != None and options["haswellppn"] != None:
+        np_cnt = re.compile('.*:\s+-n\s+(\d*)').match(command).group(1)
+        haswell_np_cnt = float(np_cnt)
+        aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, options["knlppn"])
+        command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
+        haswell_aprun_opt = ": -n %d -N %d"  % (  haswell_np_cnt, options["haswellppn"] )
+        command = re.sub(':\s+-n\s+\d*', haswell_aprun_opt, command)
+
+      # HASWELL only not allowed with -z argument 
+      elif options["knlppn"] == None and options["haswellppn"] != None:
+        raise SyntaxError, "-z,--haswellppn only allowed with -k,--knlppn option" 
+
+      # standard run 
       else:
+        if options["ppn"] > pes:
+          ppn = pes
+        else:
           ppn = options["ppn"]
-      aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, ppn)
-      command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
+
+        aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, ppn)
+        command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
+      
     if   options["quiet"] is not True:    print command
     if   options["dispatch"] == 'list':   pass 
     elif options["dispatch"] == "serial": runSerial(command) 
@@ -337,9 +377,29 @@ def submit( command, options ):
   pe = float(np)
   nodes = math.ceil(float(np) / float(options["ppn"]))
   if options["dispatch"] == "msub":
-    m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] ) 
+
+    # For cray deterimine if running on KNL only or Haswell only
+    # or KNL+Haswell
+    # KNL only
+    # need to specify KNL in msub spec
+    if options["knlppn"] != None and options["haswellppn"] == None:
+      nodes = math.ceil(float(np) / float(options["knlppn"]))
+      m_opts = "-l nodes=%d:%s:ppn=%d" % (nodes, "knl", options["knlppn"])
+
+    # KNL + HASWELL 
+    # need to specify knl and haswell in msub spec 
+    elif options["knlppn"] != None and options["haswellppn"] != None:
+      knlnodes = pe/options["knlppn"]
+      m_opts = "-l nodes=%d:%s:ppn=%d" % (knlnodes, "knl", options["knlppn"])
+      np = re.compile('.*:*-n\s+(\d*)').match(command).group(1)
+      pe = float(np)
+      nodes = math.ceil(float(np) / float(options["haswellppn"]))
+      m_opts += "+%d:%s:ppn=%d" % (nodes, "haswell", options["haswellppn"])
+
+    # else normal
+    else:
+      m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] ) 
   elif options["dispatch"] == "qsub":
-    #m_opts = "-l mppwidth=%d,mppnppn=%d" % ( pe, options["ppn"] )
     m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] )
   if options["msub"] is not None: 
     m_opts += " %s" % options["msub"]
@@ -465,15 +525,62 @@ def get_commands( mpi_program, expr_mgmt_options, program_arguments=None,
   if not executable(mpi_program):
     die( mpi_program + " is not a valid executable." )
     return
-
   commands = [ ]
   for mpi_opt in opts_to_list(mpi_options):
     for pro_opt in opts_to_list(program_options):
-      for pro_arg in args_to_list(program_arguments):
-        command = "%s %s %s %s %s" % \
-                    ( mpirun, mpi_opt, mpi_program, pro_opt, pro_arg )
+
+
+      # This code determines if we are using Cray KNL nodes only or 
+      # Cray KNL and Haswell nodes in the same allocation.  The aprun must
+      # be configured specifically for these types of runs
+      # The executable contains a _knl or _haswell so configure here 
+      # KNL run only
+      if expr_mgmt_options["knlppn"] != None and expr_mgmt_options["haswellppn"] == None:
+        mpi_prog_knl = "%s%s" % (mpi_program, "_knl")
+
+        for pro_arg in args_to_list(program_arguments):
+          command = "%s %s %s %s %s" % \
+                    ( mpirun, mpi_opt, mpi_prog_knl, pro_opt, pro_arg )
+          commands.append( re.sub( "\s+", " ", command ).strip() ) # trim space 
+
+      # Else if KNL and Haswell allocation
+      elif expr_mgmt_options["knlppn"] != None and expr_mgmt_options["haswellppn"] != None:
+        mpi_prog_knl = "%s%s" % (mpi_program, "_knl")
+        mpi_prog_haswell = "%s%s" % (mpi_program, "_haswell")
+
+        total_procs = re.compile('\s*-n\s+(\d*)').match(mpi_opt).group(1) 
+        total_procs = float(total_procs) 
+         
+        # divide the number of processes in half - half for KNL and half for 
+        # Haswell
+        knl_procs = total_procs/2
+        haswell_procs = total_procs/2
+
+        mpi_opt_knl = " -n %d" % (knl_procs)
+        mpi_opt_haswell = " -n %d" % (haswell_procs)
+
+        command = "%s %s %s %s  : %s %s %s" % \
+                    ( mpirun, mpi_opt_knl, mpi_prog_knl, \
+                      pro_opt, mpi_opt_haswell, mpi_prog_haswell, pro_opt )
+        #print command
         commands.append( re.sub( "\s+", " ", command ).strip() ) # trim space 
+        #print commands
+      else:
+        for pro_arg in args_to_list(program_arguments):
+          command = "%s %s %s %s %s" % \
+                    ( mpirun, mpi_opt, mpi_program, pro_opt, pro_arg )
+          commands.append( re.sub( "\s+", " ", command ).strip() ) # trim space 
   return commands
+
+
+#  commands = [ ]
+#  for mpi_opt in opts_to_list(mpi_options):
+#    for pro_opt in opts_to_list(program_options):
+#      for pro_arg in args_to_list(program_arguments):
+#        command = "%s %s %s %s %s" % \
+#                    ( mpirun, mpi_opt, mpi_program, pro_opt, pro_arg )
+#        commands.append( re.sub( "\s+", " ", command ).strip() ) # trim space 
+#  return commands
 
 ##
 ## The following function is no longer in use but the preserved code is to
