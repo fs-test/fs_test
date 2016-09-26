@@ -301,11 +301,9 @@ def dispatch_commands( commands, options ):
         command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
         haswell_aprun_opt = ": -n %d -N %d"  % (  haswell_np_cnt, options["haswellppn"] )
         command = re.sub(':\s+-n\s+\d*', haswell_aprun_opt, command)
-
       # HASWELL only not allowed with -z argument 
       elif options["knlppn"] == None and options["haswellppn"] != None:
         raise SyntaxError, "-z,--haswellppn only allowed with -k,--knlppn option" 
-
       # standard run 
       else:
         if options["ppn"] > pes:
@@ -316,6 +314,10 @@ def dispatch_commands( commands, options ):
         aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, ppn)
         command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
       
+      #command = re.sub(':\s+-n\s+\d*', aprun_opt, command)
+      # DO KNL MAGIC HERE to figure out how many procs 
+      # KNL and how many HASWELL
+       
     if   options["quiet"] is not True:    print command
     if   options["dispatch"] == 'list':   pass 
     elif options["dispatch"] == "serial": runSerial(command) 
@@ -360,7 +362,9 @@ def submit( command, options ):
     #   srun
     try:
       #np = re.compile('.*aprun\s+-n\s+(\d*)').match(command).group(1)
-      np = re.compile('.*aprun.*-n\s+(\d*)').match(command).group(1)
+      #np = re.compile('.*aprun.*-n\s+(\d*)').match(command).group(1)
+      #mdtest uses -n in arguments so need a better reg expression
+      np = re.compile('.*aprun.*-n\s+(\d*)\s+-N').match(command).group(1)
     except AttributeError:
       try:
         np = re.compile('.*mpirun\s+-np?\s+(\d*)').match(command).group(1)
@@ -381,7 +385,7 @@ def submit( command, options ):
     # For cray deterimine if running on KNL only or Haswell only
     # or KNL+Haswell
     # KNL only
-    # need to specify KNL in msub spec
+    # need to specify Haswell in msub spec
     if options["knlppn"] != None and options["haswellppn"] == None:
       nodes = math.ceil(float(np) / float(options["knlppn"]))
       m_opts = "-l nodes=%d:%s:ppn=%d" % (nodes, "knl", options["knlppn"])
