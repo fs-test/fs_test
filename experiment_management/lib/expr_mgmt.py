@@ -361,10 +361,7 @@ def submit( command, options ):
     #   mpirun
     #   srun
     try:
-      #np = re.compile('.*aprun\s+-n\s+(\d*)').match(command).group(1)
-      #np = re.compile('.*aprun.*-n\s+(\d*)').match(command).group(1)
-      #mdtest uses -n in arguments so need a better reg expression
-      np = re.compile('.*aprun.*-n\s+(\d*)\s+-N').match(command).group(1)
+      np = re.compile('.*aprun.*?-n\s+(\d*)').match(command).group(1)
     except AttributeError:
       try:
         np = re.compile('.*mpirun\s+-np?\s+(\d*)').match(command).group(1)
