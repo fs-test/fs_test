@@ -63,6 +63,8 @@ def main():
     #initDictionary(db_data, description)
     initDictionary(db_data)
 
+    db_data['jobid'] = re.compile('.*\.o(\d+)').match(out_file).group(1) 
+
     parseOutput(ior_output, db_data)
 
     db_insert(db, db_data, db_path)
