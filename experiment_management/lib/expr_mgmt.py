@@ -187,7 +187,7 @@ def clp_parse( argv=None, usage=None, description=None, version=None,
       type="string", default=defaults["walltime"] ),
     make_option("-L", "--lastjob", metavar="L",
       help="make first command depend on an existing qsub job "
-         "[default=%default]", type="int", default=defaults["lastjob"] ),
+         "[default=%default]", type="string", default=defaults["lastjob"] ),
     make_option("-c", "--chain", 
       help="make each command depend on the previous [default=%default]",
       action="store_true", default=defaults["chain"] ),
@@ -452,7 +452,7 @@ def submit( command, options ):
 #    else: jobid=out
      if ["options[use_datawarp"] is True :
        jobs = out.split()
-       jobid = jobs[1]
+       jobid = jobs[2]
      else: 
        jobid=out
 
