@@ -65,9 +65,11 @@ def options_parse(argv=None, usage=None, description=None, version=None,
             raise configError("runcommand must be specified")
             
         # If dispatch is msub or qsub, must have ppn and outdir
-        if options["dispatch"] == "msub" or options["dispatch"] == "qsub":
+        if options["dispatch"] == "msub" \
+           or options["dispatch"] == "qsub" \
+           or options["dispatch"] == "sbatch":
             if options["ppn"] == None or options["outdir"] == None:
-                raise configError("with dispatch=msub or qsub, ppn and outdir "
+                raise configError("with dispatch=msub or qsub or sbatch, ppn and outdir "
                     + "must be specified")
 
     except configError, detail:
@@ -269,7 +271,9 @@ def dispatch_commands( commands, options ):
     commands = tmp 
   if options["random"] is True: random.shuffle(commands)
 
-  if options["dispatch"] == "msub" or options["dispatch"] == "qsub":
+  if options["dispatch"] == "msub" or \
+   options["dispatch"] == "sbatch" or \
+   options["dispatch"] == "qsub":
     outdir = options["outdir"] + "/" + str(datetime.date.today())
     if not os.path.isdir( outdir ): os.makedirs( outdir, 0777 )
     os.chdir( outdir )
@@ -321,7 +325,9 @@ def dispatch_commands( commands, options ):
     if   options["quiet"] is not True:    print command
     if   options["dispatch"] == 'list':   pass 
     elif options["dispatch"] == "serial": runSerial(command) 
-    elif options["dispatch"] == "msub"  or options["dispatch"] == "qsub":
+    elif options["dispatch"] == "msub" or \
+        options["dispatch"] == "sbatch" or \
+        options["dispatch"] == "qsub":
         options["lastjob"] = submit(command,options)
         if options["lastjob"] == -1:
             return -1
@@ -332,7 +338,9 @@ def dispatch_commands( commands, options ):
   if options["quiet"] is not True: print # separate commands from status
   print "# %d jobs dispatched by %s." % (dispatched, options["dispatch"])
 
-  if options["dispatch"] == "msub" or options["dispatch"] == "qsub": 
+  if options["dispatch"] == "msub" or \
+   options["dispatch"] == "sbatch" or \
+   options["dispatch"] == "qsub": 
     os.chdir( orig_dir )  
     print "# Output in %s." % outdir
     return options["lastjob"]
@@ -378,34 +386,18 @@ def submit( command, options ):
   pe = float(np)
   nodes = math.ceil(float(np) / float(options["ppn"]))
   if options["dispatch"] == "msub":
-
-    # For cray deterimine if running on KNL only or Haswell only
-    # or KNL+Haswell
-    # KNL only
-    # need to specify Haswell in msub spec
-    if options["knlppn"] != None and options["haswellppn"] == None:
-      nodes = math.ceil(float(np) / float(options["knlppn"]))
-      m_opts = "-l nodes=%d:%s:ppn=%d" % (nodes, "knl", options["knlppn"])
-
-    # KNL + HASWELL 
-    # need to specify knl and haswell in msub spec 
-    elif options["knlppn"] != None and options["haswellppn"] != None:
-      knlnodes = pe/options["knlppn"]
-      m_opts = "-l nodes=%d:%s:ppn=%d" % (knlnodes, "knl", options["knlppn"])
-      np = re.compile('.*:*-n\s+(\d*)').match(command).group(1)
-      pe = float(np)
-      nodes = math.ceil(float(np) / float(options["haswellppn"]))
-      m_opts += "+%d:%s:ppn=%d" % (nodes, "haswell", options["haswellppn"])
-
-    # else normal
-    else:
-      m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] ) 
+     m_opts=get_moab_options(options, np, nodes)
+  elif options["dispatch"] == "sbatch":
+     m_opts=get_slurm_options(options,np, nodes)
   elif options["dispatch"] == "qsub":
     m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] )
   if options["msub"] is not None: 
     m_opts += " %s" % options["msub"]
   if options["chain"] is True and options["lastjob"] is not None: 
-    m_opts += " -l depend=%s" % options["lastjob"]
+    if options["dispatch"] == "msub":
+      m_opts += " -l depend=%s" % options["lastjob"]
+    elif options["dispatch"] == "sbatch":
+      m_opts += " -d %s" % options["lastjob"]
   if options["walltime"] is not None: 
     m_opts += " -l walltime=%s" % options["walltime"]
 
@@ -423,8 +415,11 @@ def submit( command, options ):
     mcommands.append( "echo \"# Using Directive %s\"" % mcommands )
   for mcommand in [ options["prescript"], command, options["postscript"] ]:
     if mcommand is not None:
+      # slurm wants shell specification 
+      if options["dispatch"] == "sbatch":
+        mcommands.append("#!/bin/sh")
       mcommands.append( "echo \"# Running %s\"" % mcommand )
-      mcommands.append( "echo \"# MSUB options: %s\"" % m_opts )
+      mcommands.append( "echo \"# %s options: %s\"" % (options["dispatch"], m_opts) )
       mcommands.append( "echo \"# run command: %s\"" % options["runcommand"])
       mcommands.append( mcommand )
   mcommand = "\n".join(mcommands)
@@ -448,11 +443,13 @@ def submit( command, options ):
     if options["use_datawarp"] is True: os.remove(tmp.name)
     out = ch.stdout.read().strip()
     try: 
-#    if options["dispatch"] == "msub": jobid = int(out)
-#    else: jobid=out
+     # Determine where jobid located in stdout response
      if ["options[use_datawarp"] is True :
        jobs = out.split()
        jobid = jobs[2]
+     elif options["dispatch"] == "sbatch":
+       jobs = out.split()
+       jobid = jobs[3]
      else: 
        jobid=out
 
@@ -467,8 +464,7 @@ def submit( command, options ):
   except Exception, e:
     print >> sys.stderr, "Execution failed:", e
     return -1
-#  print "  # MSUB ID: %d (%s)" % ( jobid, m_opts )
-  print "  # MSUB/QSUB ID: %s (%s)" % ( jobid, m_opts )
+  print "  # %s ID: %s (%s)" % ( options["dispatch"], jobid, m_opts )
   return jobid
 
 
@@ -582,6 +578,49 @@ def get_commands( mpi_program, expr_mgmt_options, program_arguments=None,
 #                    ( mpirun, mpi_opt, mpi_program, pro_opt, pro_arg )
 #        commands.append( re.sub( "\s+", " ", command ).strip() ) # trim space 
 #  return commands
+
+def get_moab_options(options, np, nodes):
+    # For cray deterimine if running on KNL only or Haswell only
+    # or KNL+Haswell
+    # KNL only
+    # need to specify Haswell in msub spec
+    if options["knlppn"] != None and options["haswellppn"] == None:
+      nodes = math.ceil(float(np) / float(options["knlppn"]))
+      m_opts = "-l nodes=%d:%s:ppn=%d" % (nodes, "knl", options["knlppn"])
+
+    # KNL + HASWELL 
+    # need to specify knl and haswell in msub spec 
+    elif options["knlppn"] != None and options["haswellppn"] != None:
+      knlnodes = pe/options["knlppn"]
+      m_opts = "-l nodes=%d:%s:ppn=%d" % (knlnodes, "knl", options["knlppn"])
+      np = re.compile('.*:*-n\s+(\d*)').match(command).group(1)
+      pe = float(np)
+      nodes = math.ceil(float(np) / float(options["haswellppn"]))
+      m_opts += "+%d:%s:ppn=%d" % (nodes, "haswell", options["haswellppn"])
+
+    # else normal
+    else:
+      m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] ) 
+    return m_opts
+
+def get_slurm_options(options, np, nodes):
+    # For cray deterimine if running on KNL only or Haswell only
+    # or KNL+Haswell
+    # KNL only
+    # need to specify Haswell in msub spec
+    if options["knlppn"] != None and options["haswellppn"] == None:
+      nodes = math.ceil(float(np) / float(options["knlppn"]))
+      m_opts = "-N %d -n d" % (nodes, options["knlppn"])
+
+    # KNL + HASWELL 
+    # Currently NOT implemented in slurm
+    # if options["knlppn"] != None and options["haswellppn"] != None:
+    # 
+    # else - Haswell
+    else:
+      #m_opts = "-N %d -n %d" % (nodes, options["ppn"])
+      m_opts = "-N %d --ntasks-per-node=%d" % (nodes, options["ppn"])
+    return m_opts
 
 ##
 ## The following function is no longer in use but the preserved code is to
