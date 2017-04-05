@@ -283,9 +283,9 @@ def dispatch_commands( commands, options ):
   # default ppn or ppn passed in with -p option.  The change was needed
   # here because of -list option
   for command in commands:
-    # if cray type aprun
-    if options["runcommand"] == 'aprun' and options["nprocs"] == None:
-      np_cnt = re.compile('.*aprun\s+-n\s+(\d*)').match(command).group(1)
+    # if cray type aprun or srun 
+    if options["runcommand"] == 'aprun' or options["runcommand"] == 'srun' and options["nprocs"] == None:
+      np_cnt = re.compile('.*run\s+-n\s+(\d*)').match(command).group(1)
       pes = float(np_cnt)
 
       # Trinity allows for runs on KNL only, Haswell only and on
@@ -294,8 +294,12 @@ def dispatch_commands( commands, options ):
       # Haswell
       # KNL only 
       if options["knlppn"] != None and options["haswellppn"] == None:
-        aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, options["knlppn"])
-        command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
+        if options["runcommand"] == 'srun':
+          aprun_opt = "%s -n %d -N %d " % ( "srun", pes, options["knlppn"])
+          command = re.sub('srun\s+-n\s+\d*', aprun_opt, command)
+        else:
+          aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, options["knlppn"])
+          command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
 
       # KNL + HASWELL
       elif options["knlppn"] != None and options["haswellppn"] != None:
@@ -314,15 +318,20 @@ def dispatch_commands( commands, options ):
           ppn = pes
         else:
           ppn = options["ppn"]
-
-        aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, ppn)
-        command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
+        
+        if options["runcommand"] == 'aprun':
+          aprun_opt = "%s -n %d -N %d " % ( "aprun", pes, ppn)
+          command = re.sub('aprun\s+-n\s+\d*', aprun_opt, command)
+        elif options["runcommand"] == 'srun':
+          srun_opt = "%s -n %d -N %d " % ( "srun", pes, ppn)
+          command = re.sub('srun\s+-n\s+\d*', srun_opt, command)
       
       #command = re.sub(':\s+-n\s+\d*', aprun_opt, command)
       # DO KNL MAGIC HERE to figure out how many procs 
       # KNL and how many HASWELL
        
-    if   options["quiet"] is not True:    print command
+    if   options["quiet"] is not True:    
+      if options["runcommand"] != 'srun': print command
     if   options["dispatch"] == 'list':   pass 
     elif options["dispatch"] == "serial": runSerial(command) 
     elif options["dispatch"] == "msub" or \
@@ -389,6 +398,10 @@ def submit( command, options ):
      m_opts=get_moab_options(options, np, nodes)
   elif options["dispatch"] == "sbatch":
      m_opts=get_slurm_options(options,np, nodes)
+     if options["runcommand"] == "srun":
+        srun_opt = "%s -n %d -N %d" % ( "srun", pe, nodes)
+        command = re.sub('srun\s+-n\s+\d*\s+-N\s+\d*',srun_opt,command)
+        print command
   elif options["dispatch"] == "qsub":
     m_opts = "-l nodes=%d:ppn=%d" % ( nodes, options["ppn"] )
   if options["msub"] is not None: 
@@ -433,7 +446,6 @@ def submit( command, options ):
 
   # now open pipes to submit it, to get the jobid, and to check for error 
   try:
-    print "options: " + m_opts 
     problem = False
     ch = Popen(["%s %s" % ( options["dispatch"],m_opts )],shell=True,stdin=PIPE,stdout=PIPE,stderr=PIPE)
     if options["use_datawarp"] is False:
@@ -610,7 +622,7 @@ def get_slurm_options(options, np, nodes):
     # need to specify Haswell in msub spec
     if options["knlppn"] != None and options["haswellppn"] == None:
       nodes = math.ceil(float(np) / float(options["knlppn"]))
-      m_opts = "-N %d -n d" % (nodes, options["knlppn"])
+      m_opts = "-N %d -n %d" % (nodes, options["knlppn"])
 
     # KNL + HASWELL 
     # Currently NOT implemented in slurm
