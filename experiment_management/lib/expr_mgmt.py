@@ -412,7 +412,10 @@ def submit( command, options ):
     elif options["dispatch"] == "sbatch":
       m_opts += " -d %s" % options["lastjob"]
   if options["walltime"] is not None: 
-    m_opts += " -l walltime=%s" % options["walltime"]
+    if options["dispatch"] == "msub":
+      m_opts += " -l walltime=%s" % options["walltime"]
+    elif options["dispatch"] == "sbatch":
+      m_opts += " -t %s" % options["walltime"]
 
   # Setting the use_datawarp flag to True will add a #DW directive to the job script 
   # and submit to msub/qsub via a file rather than a pipe.
