@@ -393,7 +393,11 @@ def submit( command, options ):
     np = options["nprocs"]
   
   pe = float(np)
-  nodes = math.ceil(float(np) / float(options["ppn"]))
+  if options["knlppn"] == None:
+     nodes = math.ceil(float(np) / float(options["ppn"]))
+  else:
+     nodes = math.ceil(float(np) / float(options["knlppn"]))
+
   if options["dispatch"] == "msub":
      m_opts=get_moab_options(options, np, nodes)
   elif options["dispatch"] == "sbatch":
@@ -624,8 +628,7 @@ def get_slurm_options(options, np, nodes):
     # KNL only
     # need to specify Haswell in msub spec
     if options["knlppn"] != None and options["haswellppn"] == None:
-      nodes = math.ceil(float(np) / float(options["knlppn"]))
-      m_opts = "-N %d -n %d" % (nodes, options["knlppn"])
+      m_opts = "-N %d --ntasks-per-node=%d" % (nodes, options["knlppn"])
 
     # KNL + HASWELL 
     # Currently NOT implemented in slurm
@@ -633,7 +636,6 @@ def get_slurm_options(options, np, nodes):
     # 
     # else - Haswell
     else:
-      #m_opts = "-N %d -n %d" % (nodes, options["ppn"])
       m_opts = "-N %d --ntasks-per-node=%d" % (nodes, options["ppn"])
     return m_opts
 
